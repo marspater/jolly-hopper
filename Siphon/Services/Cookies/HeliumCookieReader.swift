@@ -304,8 +304,15 @@ enum ChromiumCookieReader {
         let version = Int(sqlite3_column_int(metadata, 0))
         var statement: OpaquePointer?
         let sql = "SELECT host_key, name, value, encrypted_value, path, expires_utc, is_secure, is_httponly, has_expires FROM cookies"
-        guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
-            throw failure("Unsupported cookie database schema.")
+        // Partitioned (CHIPS) rows share host/name/path with first-party cookies but only
+        // apply inside one embedding site; exporting them lets an embed value replace the
+        // signed-in one. Databases older than the column fall back to the plain query.
+        if sqlite3_prepare_v2(db, sql + " WHERE COALESCE(top_frame_site_key, '') = ''", -1, &statement, nil) != SQLITE_OK {
+            sqlite3_finalize(statement)
+            statement = nil
+            guard sqlite3_prepare_v2(db, sql, -1, &statement, nil) == SQLITE_OK else {
+                throw failure("Unsupported cookie database schema.")
+            }
         }
         defer { sqlite3_finalize(statement) }
         // Bolt Performance Optimization: Read SQLite text column directly using UnsafeBufferPointer with String(bytes:encoding:)

@@ -77,6 +77,8 @@ struct SiphonApp: App {
     @AppStorage("startInBackground", store: UITestLaunchMode.defaults) private var startInBackground: Bool = false
     @AppStorage(UserDefaultsKeys.theme, store: UITestLaunchMode.defaults) private var theme: String = "system"
     @State private var hasAppliedBackgroundMode = false
+    /// A deep link in this launch keeps "Start in background" from closing the window it needs.
+    @State private var hasHandledDeepLink = false
     @State private var firstRenderSignpost: OSSignpostIntervalState? = Signposts.begin("Main window first render")
 
     init() {
@@ -167,7 +169,7 @@ struct SiphonApp: App {
         guard !hasAppliedBackgroundMode else { return }
         DispatchQueue.main.async {
             hasAppliedBackgroundMode = true
-            if startInBackground {
+            if startInBackground, !hasHandledDeepLink {
                 NSApp.setActivationPolicy(.accessory)
                 for window in NSApp.windows where window.canBecomeMain {
                     window.close()
@@ -181,6 +183,7 @@ struct SiphonApp: App {
     private func handleIncomingURL(_ url: URL) {
         guard Self.isAppDeepLink(url) else { return }
 
+        hasHandledDeepLink = true
         NSApp.setActivationPolicy(.regular)
         NSApp.bringToFront()
 
@@ -320,7 +323,10 @@ struct SiphonApp: App {
             )
             appState.setExternalTarget(rawVideoUrl)
             appState.urlToDownload = rawVideoUrl
-            appState.showAddDownloadSheet = true
+            // Open the window here rather than through `showAddDownloadSheet`: only a live
+            // ContentView observes that flag, and none may exist after the DNS check (window
+            // closed meanwhile), which would drop the link and leave the flag stuck at true.
+            AddDownloadWindowManager.shared.showAddDownloadWindow(downloadManager: downloadManager, appState: appState, languageService: languageService, updateChecker: updateChecker)
         }
 
         for window in NSApp.windows where window.canBecomeMain {

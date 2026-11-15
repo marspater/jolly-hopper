@@ -720,6 +720,7 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(download.status, .queued)
         XCTAssertEqual(download.filePaths.map(\.path), ["/tmp/One [a1].mp4"])
         XCTAssertEqual(download.options.forceOverwrite, false)
+        XCTAssertFalse(download.hasPartialFailure, "A hard failure on retry must not read as 'some items failed'")
     }
 
     func testErrorMessageDoesNotMisclassifySubstrings() {

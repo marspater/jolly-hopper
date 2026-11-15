@@ -73,6 +73,8 @@ struct AddDownloadView: View {
 
     @State private var showFileExistsAlert: Bool = false
     @State private var isCheckingExistingFile: Bool = false
+    /// Identifies the running existing-file check, so a cancelled one cannot clear a newer check's flag.
+    @State private var existingFileCheckToken: UUID?
     @State private var pendingDownloadOptions: DownloadOptions?
     @State private var existingFilePath: String = ""
 
@@ -161,6 +163,9 @@ struct AddDownloadView: View {
                 if downloadSubtitles { selectDefaultSubtitleLanguages() }
             }
             .onChange(of: urlInput) { _, newValue in resetForURL(newValue) }
+            // A stream picked for one media type is wrong for the other (video-only into
+            // audio extraction, audio-only into a video container).
+            .onChange(of: isVideoTab) { _, _ in selectedFormatId = nil }
             .onChange(of: appState.urlToDownload) { _, newURL in acceptExternalURL(newURL) }
             .alert(languageService.s("file_exists_title"), isPresented: $showFileExistsAlert) {
                 Button(languageService.s("overwrite"), role: .destructive) {
@@ -314,6 +319,14 @@ struct AddDownloadView: View {
         fetchTask?.cancel()
         // A playlist load for the previous URL must not land on the new one.
         playlistTask?.cancel()
+        // A pending existing-file check or Overwrite prompt belongs to the old URL;
+        // finishing it would queue the new URL under the old name.
+        existingFileCheckTask?.cancel()
+        existingFileCheckTask = nil
+        existingFileCheckToken = nil
+        isCheckingExistingFile = false
+        pendingDownloadOptions = nil
+        showFileExistsAlert = false
         isLoadingPlaylist = false
         showPlaylistSelector = false
         downloadMode = .single
@@ -1237,7 +1250,9 @@ struct AddDownloadView: View {
 
                 VStack(alignment: .leading, spacing: SiphonTheme.spacing8) {
                     Toggle(languageService.s("download_subtitles"), isOn: $downloadSubtitles.animation(SiphonAnimation.fluidSpring))
-                        .disabled(inputMode == .single && availableSubtitles.isEmpty)
+                        // Stay switchable while on: a preset or a previous URL can leave it on
+                        // for a video with no subtitles, and the user must be able to turn it off.
+                        .disabled(inputMode == .single && availableSubtitles.isEmpty && !downloadSubtitles)
 
                     if inputMode == .batch && downloadSubtitles {
                         TextField(languageService.s("subtitle_language_codes"), text: $batchSubtitleLanguages)
@@ -1785,8 +1800,15 @@ struct AddDownloadView: View {
                 // The check is async; a second click meanwhile would queue the job twice.
                 guard !isCheckingExistingFile else { return }
                 isCheckingExistingFile = true
+                let token = UUID()
+                existingFileCheckToken = token
                 existingFileCheckTask = Task {
-                    defer { isCheckingExistingFile = false }
+                    defer {
+                        if existingFileCheckToken == token {
+                            isCheckingExistingFile = false
+                            existingFileCheckToken = nil
+                        }
+                    }
                     let fileExists = await Task.detached { [folder, options] in
                         DownloadQueue.mediaFileCollides(
                             baseName: safeName,

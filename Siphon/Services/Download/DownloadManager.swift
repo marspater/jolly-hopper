@@ -236,6 +236,7 @@ class DownloadManager: ObservableObject {
         for job in jobsToRecover {
             job.status = job.requiresAdvancedArgumentsReview ? .paused : .queued
             job.errorMessage = nil
+            job.hasPartialFailure = false
             if let existingIndex = downloads.firstIndex(where: { $0.id == job.id }) {
                 // History may contain a stale copy of the same job. Recovery is
                 // authoritative because it carries resumable scratch state and
@@ -423,6 +424,9 @@ class DownloadManager: ObservableObject {
         download.errorMessage = nil
         download.log = ""
         download.mediaInfo = nil
+        // The previous attempt's outcome must not label this one. Finished
+        // playlist entries stay in filePaths: those files are still on disk.
+        download.hasPartialFailure = false
         // A file left by the failed or stopped attempt may be the broken result;
         // only a resumed pause may reuse it.
         download.ownedOutputFiles = [:]
@@ -442,6 +446,7 @@ class DownloadManager: ObservableObject {
         download.options.forceOverwrite = false
         download.errorMessage = nil
         download.mediaInfo = nil
+        download.hasPartialFailure = false
         updateStatus(for: download, to: .queued)
         addToHistory(download)
         objectWillChange.send()

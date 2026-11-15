@@ -223,9 +223,12 @@ extension MediaInfo {
                 return cached
             }
             // acodec "none" excludes storyboards (vcodec and acodec both "none"), which carry no audio.
-            let audioFormats = formats.filter {
-                ($0.isAudioOnly || $0.vcodec == "none" || $0.vcodec == nil) && $0.acodec != "none"
-            }
+            // Formats with an unknown vcodec are often muxed video, so they are used only when no real
+            // audio-only format exists; otherwise their total bitrate can outrank a real audio track.
+            let audioOnly = formats.filter { ($0.isAudioOnly || $0.vcodec == "none") && $0.acodec != "none" }
+            let audioFormats = audioOnly.isEmpty
+                ? formats.filter { $0.vcodec == nil && $0.acodec != "none" }
+                : audioOnly
             let sorted = audioFormats.sorted { MediaFormat.compareAudioFormats($0, $1, options: options) }
             let best = sorted.first
             cachedBestAudio = best

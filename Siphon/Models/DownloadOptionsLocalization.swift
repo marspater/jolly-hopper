@@ -220,6 +220,11 @@ extension Download {
         let isYouTube = url.lowercased().contains("youtube.com") || url.lowercased().contains("youtu.be")
         return [
             ErrorRule(matches: isYouTube && lower.contains("sign in to confirm"), descriptionKey: "youtube_auth_required", action: .fixInSettings),
+            // Siphon's own messages already say what to do; keep them instead of the generic fallback.
+            ErrorRule(matches: error == lang.s("too_many_requests"), descriptionKey: "too_many_requests", action: .fixInSettings),
+            ErrorRule(matches: error == lang.s("ffmpeg_error"), descriptionKey: "ffmpeg_error", action: .fixInSettings),
+            ErrorRule(matches: error == lang.s("parse_error"), descriptionKey: "parse_error", action: .retry),
+            ErrorRule(matches: error == lang.s("media_integrity_failed"), descriptionKey: "media_integrity_failed", action: .retry),
             ErrorRule(matches: mentions(["cloudflare", "anti-bot", "captcha", "challenge"]), descriptionKey: "anti_bot_desc", action: .retry),
             // Settings can't fix this one: the user signs in (Safari or Siphon's window), then retries.
             ErrorRule(matches: error == lang.s("site_sign_in_required"), descriptionKey: "site_sign_in_required_desc", action: .retry),

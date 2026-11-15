@@ -148,6 +148,17 @@ struct DownloadDiagnosticsView: View {
         }
     }
 
+    // Nothing fills `diagnostics.httpRetries`, so count yt-dlp's "Retrying" lines in the log.
+    // ponytail: log keeps only its last ~25-50 KB, so very long runs can undercount.
+    private var httpRetryCount: Int {
+        // yt-dlp writes "Retrying (1/10)" and "Retrying fragment 3 (1/10)"; Siphon's own
+        // "[Siphon Info] ... Retrying download ..." fallback notices are not HTTP retries.
+        let logged = download.log.split(whereSeparator: \.isNewline).filter {
+            $0.contains("Retrying (") || $0.contains("Retrying fragment")
+        }.count
+        return max(download.diagnostics.httpRetries, logged)
+    }
+
     private var runtimeTab: some View {
         VStack(spacing: 12) {
             diagnosticSection(title: languageService.s("diag_process_execution")) {
@@ -162,7 +173,7 @@ struct DownloadDiagnosticsView: View {
                 diagnosticRow(label: languageService.s("diag_resolved_domain"), value: download.sourceDomain)
                 diagnosticRow(label: languageService.s("diag_peak_speed"), value: download.diagnostics.peakSpeed ?? download.speed ?? languageService.s("diag_not_available"))
                 diagnosticRow(label: languageService.s("diag_duration"), value: download.duration ?? languageService.s("diag_not_available"))
-                diagnosticRow(label: languageService.s("diag_http_retries"), value: "\(download.diagnostics.httpRetries)")
+                diagnosticRow(label: languageService.s("diag_http_retries"), value: "\(httpRetryCount)")
             }
         }
     }
@@ -199,9 +210,18 @@ struct DownloadDiagnosticsView: View {
 
     // MARK: - Tab 3: Command & Logs
 
+    /// YtdlpService logs the sanitized argv as a `[COMMAND] ` line; any other line is not a command.
+    private var executedCommand: String? {
+        if let cmd = download.diagnostics.commandLine { return cmd }
+        let prefix = "[COMMAND] "
+        return download.log.split(whereSeparator: \.isNewline)
+            .first { $0.hasPrefix(prefix) }
+            .map { String($0.dropFirst(prefix.count)) }
+    }
+
     private var commandAndLogsTab: some View {
         VStack(spacing: 14) {
-            if let cmd = download.diagnostics.commandLine ?? (download.log.split(whereSeparator: \.isNewline).first(where: { $0.contains("yt-dlp") }).map(String.init)) {
+            if let cmd = executedCommand {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
                         Text(languageService.s("executed_command"))

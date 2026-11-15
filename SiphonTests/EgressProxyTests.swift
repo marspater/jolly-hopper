@@ -381,7 +381,7 @@ final class EgressProxyTests: XCTestCase {
     func testProxyStreamsExactlyOneFragmentedBodyAfterClientHalfClose() async throws {
         let body = String(repeating: "payload", count: 10000)
         let server = MockHTTPServer()
-        let serverPort = try server.start(waitForEOF: true) { _ in (200, [:], Data("FULL RESPONSE".utf8)) }
+        let serverPort = try server.start { _ in (200, [:], Data("FULL RESPONSE".utf8)) }
         defer { server.stop() }
         let proxy = EgressProxyServer(targetValidator: { _, port in port == Int(serverPort) })
         let proxyPort = try await proxy.start()

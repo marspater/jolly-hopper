@@ -475,15 +475,23 @@ class YtdlpService: ObservableObject {
     @discardableResult
     func clearAllProtectedSitesWebData() async -> Bool {
         guard !UITestLaunchMode.isActive else { return true }
-        guard !webKitSessionBusy else {
+        guard !webKitSessionBusy, webDataClearTask == nil else {
             LoggerService.shared.log("[ProtectedSite] Not clearing site data while a site window is in use.", level: .warning)
             return false
         }
-        let recu = await clearRecuWebData()
-        let boyfriendTV = await clearBoyfriendTVWebData()
-        let gayteam = await clearGayteamWebData()
-        return recu && boyfriendTV && gayteam
+        // Held until every store is gone: a session starting at one of the
+        // awaits below would recreate its store and have it wiped under it.
+        let clear = Task<Bool, Never> { @MainActor in
+            defer { self.webDataClearTask = nil }
+            let recu = await self.clearRecuWebData()
+            let boyfriendTV = await self.clearBoyfriendTVWebData()
+            let gayteam = await self.clearGayteamWebData()
+            return recu && boyfriendTV && gayteam
+        }
+        webDataClearTask = clear
+        return await clear.value
     }
+    private var webDataClearTask: Task<Bool, Never>?
     // Test seam for Safari's saved cookies. Production reads Safari's cookie store.
     var safariCookiesProvider: @Sendable () -> [HTTPCookie] = { SafariCookieReader.cookies() }
     // Test seam for the player capture session. Production uses WKWebView.
@@ -528,6 +536,11 @@ class YtdlpService: ObservableObject {
     }
 
     func withExclusiveWebKitSession<T>(site: String = "", _ body: () async throws -> T) async throws -> T {
+        // The clear task resets this before it completes, so the loop ends.
+        while let clear = webDataClearTask {
+            _ = await clear.value
+            try Task.checkCancellation()
+        }
         if busyWebKitSites.contains(site) {
             let id = UUID()
             try await withTaskCancellationHandler {
@@ -1535,6 +1548,8 @@ class YtdlpService: ObservableObject {
                 LoggerService.shared.log("Retrying metadata extraction with configured browser cookies", level: .info)
                 var retryOptions = options
                 retryOptions.forceBrowserCookies = true
+                // Extension cookies skip browser cookies entirely; the retry uses the browser's instead.
+                retryOptions.rawCookies = nil
                 return try await fetchSingleVideoInfo(path: path, url: url, options: retryOptions)
             }
             let isTransientNet = !usesBrowserTransport(url) && Self.isTransientNetworkError(String(describing: error))
@@ -2347,7 +2362,8 @@ public struct DownloadResult: Sendable {
         }
 
         // Prepare local scratch thumbnail if available to guarantee embedding for direct stream downloads
-        let thumbnailCandidateURL = customThumbnailURL ?? mediaInfo?.thumbnail
+        // A playlist's own thumbnail is not any entry's cover; entries keep theirs.
+        let thumbnailCandidateURL = customThumbnailURL ?? (isPlaylist ? nil : mediaInfo?.thumbnail)
         let scratchThumbnailURL = scratchDirectory.appendingPathComponent("custom_cover.jpg")
         // Fetched alongside yt-dlp (up to 15 s) instead of before it; the
         // poster is only needed after the download. Inherits the egress binding.
@@ -4982,6 +4998,7 @@ public struct DownloadResult: Sendable {
             while true {
                 try Task.checkCancellation()
                 let output: String
+                var commandFailed = false
                 do {
                     output = try await runMetadataCommand(args)
                 } catch is CancellationError {
@@ -4993,6 +5010,7 @@ public struct DownloadResult: Sendable {
                         throw error
                     }
                     output = failure
+                    commandFailed = true
                 }
                 try Task.checkCancellation()
                 // Classify only diagnostic lines, never URLs or base64 page content.
@@ -5008,6 +5026,10 @@ public struct DownloadResult: Sendable {
                 if args.contains("safari"), isSafariPermissionError(output) {
                     safariCookieAccessDenied = true
                     recordCookieDenial(browser: "safari", url: args.last ?? targetUrl, errorOutput: output)
+                } else if commandFailed, isCookieFailureError(output),
+                          let index = args.firstIndex(of: "--cookies-from-browser"), index + 1 < args.count {
+                    // Like runCommand: the loops below skip this browser for the host from now on.
+                    recordCookieDenial(browser: args[index + 1], url: args.last ?? targetUrl, errorOutput: output)
                 }
                 let html = inspectPage(output, stage: stage)
                 let transient = isTransientServerError(lower) || lower.contains("timed out")
@@ -5109,7 +5131,7 @@ public struct DownloadResult: Sendable {
                 let candidateURL = candidatePage.absoluteString
                 let isAlternate = candidateURL != targetUrl
                 for browser in browsersToTry {
-                    if let browserName = browser, deniedCookieSources.contains(browserName) { continue }
+                    if let browserName = browser, isCookieDenied(browser: browserName, url: candidateURL) { continue }
                     var args = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
                     if let browserName = browser {
                         args.append(contentsOf: ["--cookies-from-browser", Self.cookiesFromBrowserArgument(for: browserName)])
@@ -5318,7 +5340,7 @@ public struct DownloadResult: Sendable {
                     }
 
                     for browser in browsersToTry {
-                        if let browserName = browser, deniedCookieSources.contains(browserName) { continue }
+                        if let browserName = browser, isCookieDenied(browser: browserName, url: embed) { continue }
                         var embedArgs = [ytdlp.path, "--ignore-config", "--dump-pages", "--skip-download", "--no-playlist"]
                         if let browserName = browser {
                             embedArgs.append(contentsOf: ["--cookies-from-browser", Self.cookiesFromBrowserArgument(for: browserName)])
@@ -7559,10 +7581,14 @@ public struct DownloadResult: Sendable {
         forceBrowserCookies: Bool,
         browserCookieSource: String? = nil
     ) -> Bool {
-        let selectedBrowser = Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
+        // Same browser choice as appendCookieArgs, so the retry really adds browser cookies.
+        let selectedBrowser = browserCookieSource != nil
+            ? Self.validatedBrowserCookieSource(browserCookieSource)
+            : configuredBrowserCookieSource()
         guard !(error is CancellationError), !Task.isCancelled,
-              usesBrowserTransport(url),
-              !usingBrowserCookies, !forceBrowserCookies, selectedBrowser != nil else { return false }
+              usesBrowserTransport(url), !isEpornerURL(url),
+              !usingBrowserCookies, !forceBrowserCookies,
+              let browser = selectedBrowser, !isCookieDenied(browser: browser, url: url) else { return false }
         let message = String(describing: error)
             .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression).lowercased()
         return message.containsAny(["403", "401", "sign in", "login", "cloudflare", "challenge"])
@@ -7574,9 +7600,13 @@ public struct DownloadResult: Sendable {
         browserCookieSource: String? = nil
     ) -> Error {
         let errString = "\(error)"
-        let lowerErr = (usesBrowserTransport(url)
-            ? errString.replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression)
-            : errString).lowercased()
+        // Keyword checks must not match the video's own URL or slug: yt-dlp
+        // prefixes errors with "[extractor] <id>:", and the generic id is the
+        // page slug (e.g. "gym-challenge-1403" would read as a 403 challenge).
+        let lowerErr = errString
+            .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression)
+            .replacingOccurrences(of: #"(\[[\w:-]+\]) [^\s:]+:"#, with: "$1 [id]:", options: .regularExpression)
+            .lowercased()
         let configuredBrowser = Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
 
         if (configuredBrowser == "safari" || configuredBrowser == nil) && isSafariPermissionError(errString) {
@@ -7646,11 +7676,14 @@ public struct DownloadResult: Sendable {
         }
 
         if isGFFURL(url) {
-            if lowerErr.containsAny(Self.cloudflareErrorKeywords) || lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
+            if lowerErr.containsAny(Self.cloudflareErrorKeywords) {
                 return YtdlpError.cloudflareBlocked
             }
             if Self.isVideoUnavailableError(lowerErr) {
                 return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
+            }
+            if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
+                return YtdlpError.cloudflareBlocked
             }
             return error
         }
@@ -7756,6 +7789,31 @@ public struct DownloadResult: Sendable {
         }
     }
 
+    /// Whether `args` sets `option` as `--opt value`, `--opt=value` or its short form (`-N 16`, `-N16`).
+    nonisolated static func setsOption(_ args: [String], _ option: String, short: String? = nil) -> Bool {
+        args.contains { arg in
+            arg == option || arg.hasPrefix(option + "=")
+                || (short.map { arg == $0 || (arg.hasPrefix($0) && arg.dropFirst($0.count).first?.isNumber == true) } ?? false)
+        }
+    }
+
+    /// The user's advanced arguments come earlier in `args`, and yt-dlp keeps an
+    /// option's last value: a default the user already set is left out.
+    nonisolated static func appendDefaultOption(_ option: String, _ value: String, short: String? = nil, to args: inout [String]) {
+        if !setsOption(args, option, short: short) { args.append(contentsOf: [option, value]) }
+    }
+
+    /// A site's pacing limit wins over Siphon's default and the user's value alike.
+    nonisolated static func capOption(_ option: String, _ value: String, short: String? = nil, in args: inout [String]) {
+        if let index = args.lastIndex(of: option), index + 1 < args.count {
+            args[index + 1] = value
+        }
+        // A short or `=` form (`-N 16`) escapes the in-place edit; a later value still wins.
+        if setsOption(args.filter { $0 != option }, option, short: short) {
+            args.append(contentsOf: [option, value])
+        }
+    }
+
     private func appendSiteSpecificArgs(for url: String, options: DownloadOptions? = nil, mediaInfo: MediaInfo? = nil, rawUserAgent: String? = nil, to args: inout [String]) {
         let lowerUrl = url.lowercased()
         let parsedHost = (URL(string: url)?.host ?? url).lowercased()
@@ -7771,17 +7829,18 @@ public struct DownloadResult: Sendable {
         let isPornhub = Self.isPornhubURL(parsedHost) || Self.isPornhubURL(url)
 
         // Retries, socket timeouts & performance optimization flags
-        args.append(contentsOf: ["--retries", "10"])
-        args.append(contentsOf: ["--fragment-retries", "10"])
+        // User arguments (earlier in `args`) win over these defaults; the site
+        // pacing rules below still cap retries, workers and retry sleep.
+        Self.appendDefaultOption("--retries", "10", short: "-R", to: &args)
+        Self.appendDefaultOption("--fragment-retries", "10", to: &args)
         // yt-dlp retries immediately by default, so a 429/503 burst uses up
-        // every retry in a second. Site rules below may tighten this; user
-        // arguments (earlier in `args`) win when they set their own.
-        if !args.contains("--retry-sleep") {
+        // every retry in a second.
+        if !Self.setsOption(args, "--retry-sleep") {
             args.append(contentsOf: ["--retry-sleep", "http:exp=1:20", "--retry-sleep", "fragment:exp=1:20"])
         }
         let isVPN = NetworkEnvironmentService.shared.isVPNActive
         let socketTimeout = isVPN ? "30" : "15"
-        args.append(contentsOf: ["--socket-timeout", socketTimeout])
+        Self.appendDefaultOption("--socket-timeout", socketTimeout, to: &args)
         if !NetworkEnvironmentService.shared.supportsIPv6 && !args.contains("-4") && !args.contains("--force-ipv4") {
             args.append("--force-ipv4")
         }
@@ -7862,19 +7921,19 @@ public struct DownloadResult: Sendable {
         // Signed, rate-limited segments should each use one request; splitting a
         // large segment into Range chunks consumes additional server allowance.
         if !isEporner && !isRecu {
-            args.append(contentsOf: ["--http-chunk-size", "10M"])
+            Self.appendDefaultOption("--http-chunk-size", "10M", to: &args)
         }
-        args.append(contentsOf: ["--buffer-size", "64K"])
+        Self.appendDefaultOption("--buffer-size", "64K", to: &args)
 
         // Adaptive rate-throttling recovery:
         // YouTube and ThisVid throttle video streams aggressively and require active rate monitoring & re-extraction.
         // Scoped specifically to prevent false-positive re-extractions on slow connections for other domains.
         if isYouTube || isThisVid {
-            args.append(contentsOf: ["--throttled-rate", "100K"])
+            Self.appendDefaultOption("--throttled-rate", "100K", to: &args)
         }
 
         if isFragmented {
-            args.append(contentsOf: ["--concurrent-fragments", "8"])
+            Self.appendDefaultOption("--concurrent-fragments", "8", short: "-N", to: &args)
         }
 
         if isBoyfriendTV && !isSafari && !isFirefox {
@@ -7903,9 +7962,7 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Sec-Fetch-Dest:empty"])
             // Recu's CDN serves about one segment per second per client and answers
             // parallel requests with 429, so extra fragment workers only add retries.
-            if let index = args.lastIndex(of: "--concurrent-fragments"), index + 1 < args.count {
-                args[index + 1] = "1"
-            }
+            Self.capOption("--concurrent-fragments", "1", short: "-N", in: &args)
         } else if isGayPornTubeURL(url) {
             args.append(contentsOf: ["--add-header", "Referer:\(url)"])
             args.append(contentsOf: ["--add-header", "Origin:https://www.gayporntube.com"])
@@ -7967,9 +8024,7 @@ public struct DownloadResult: Sendable {
             // The CDN answers segment bursts with 503. Eight workers without
             // backoff exhaust retries and skip segments; four with backoff finish
             // a 28-minute video in about 30 s. A skipped segment is a broken file.
-            if let index = args.lastIndex(of: "--concurrent-fragments"), index + 1 < args.count {
-                args[index + 1] = "4"
-            }
+            Self.capOption("--concurrent-fragments", "4", short: "-N", in: &args)
             args.append(contentsOf: ["--retry-sleep", "http:exp=1:8",
                                      "--retry-sleep", "fragment:exp=1:8",
                                      "--abort-on-unavailable-fragments"])
@@ -8045,11 +8100,9 @@ public struct DownloadResult: Sendable {
         if usesBrowserTransport(url) && !isRecu {
             refreshBrowserTransportIdentity(for: url, args: &args)
             // Smaller request bursts and bounded exponential backoff for sensitive hosts.
-            for flag in ["--retries", "--fragment-retries", "--concurrent-fragments"] {
-                if let index = args.lastIndex(of: flag), index + 1 < args.count {
-                    args[index + 1] = flag == "--concurrent-fragments" ? "2" : "3"
-                }
-            }
+            Self.capOption("--retries", "3", short: "-R", in: &args)
+            Self.capOption("--fragment-retries", "3", in: &args)
+            Self.capOption("--concurrent-fragments", "2", short: "-N", in: &args)
             args.append(contentsOf: ["--extractor-retries", "2",
                                      "--retry-sleep", "http:exp=1:8",
                                      "--retry-sleep", "fragment:exp=1:8",
@@ -8112,8 +8165,12 @@ public struct DownloadResult: Sendable {
             return false
         }
         // A permission error alone can be the save folder, not the browser's cookie store.
-        let namesCookieStore = lower.contains("cookie") || lower.contains("safari")
-        return (namesCookieStore && (lower.contains("operation not permitted") || lower.contains("errno 1"))) ||
+        // The error carries the output path, so a title such as "Cookie Recipe" must not
+        // count: name the store by its file (Chromium "Cookies", Firefox cookies.sqlite).
+        let namesCookieStore = lower.range(of: #"cookies\.sqlite|[/\\]cookies(['"\\]|$)"#,
+                                           options: .regularExpression) != nil
+        return (namesCookieStore && (lower.contains("operation not permitted") || lower.contains("[errno 1]") ||
+                                     lower.contains("permission denied"))) ||
                lower.contains("cookies.binarycookies") ||
                (lower.contains("could not find") && lower.contains("cookies database")) ||
                lower.contains("failed to decrypt") ||
@@ -8122,9 +8179,11 @@ public struct DownloadResult: Sendable {
 
     private func isSafariPermissionError(_ errorOutput: String) -> Bool {
         let lower = errorOutput.lowercased()
-        guard lower.contains("safari") || lower.contains("cookies.binarycookies") else { return false }
+        // Only Safari's cookie file proves it: "safari" can come from the output path,
+        // and a save-folder denial must not disable Safari cookies for every site.
+        guard lower.contains("cookies.binarycookies") else { return false }
         return lower.contains("operation not permitted") ||
-               lower.contains("errno 1") ||
+               lower.contains("[errno 1]") ||
                lower.contains("permission denied")
     }
 
