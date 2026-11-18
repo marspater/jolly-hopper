@@ -1738,6 +1738,41 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
+    func testUnsafeThumbnailExtensionRetryDropsOnlyYtdlpThumbnailFlags() {
+        let error = "ERROR: The extracted extension ('v1688371849') is unusual and will be skipped for safety reasons."
+        XCTAssertTrue(YtdlpService.isUnsafeExtensionError(error))
+        XCTAssertFalse(YtdlpService.isUnsafeExtensionError("ERROR: HTTP Error 403: Forbidden"))
+
+        let args = ["-o", "t.%(ext)s", "--write-thumbnail", "--embed-thumbnail", "--convert-thumbnails", "jpg",
+                    "--embed-metadata", "--load-info-json", "/tmp/info.json", "--", "https://example.com/--embed-thumbnail"]
+        XCTAssertEqual(YtdlpService.argumentsWithoutThumbnailFlags(args),
+                       ["-o", "t.%(ext)s", "--embed-metadata", "--load-info-json", "/tmp/info.json",
+                        "--", "https://example.com/--embed-thumbnail"])
+        let plain = ["--embed-metadata", "--", "https://example.com/v"]
+        XCTAssertEqual(YtdlpService.argumentsWithoutThumbnailFlags(plain), plain)
+    }
+
+    func testUnsafeExtensionFailureRetriesOnceWithoutThumbnailFlags() async throws {
+        let runs = TestBox<[[String]]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockDownloadResult: { args in
+            runs.value.append(args)
+            throw YtdlpError.downloadFailed("The extracted extension ('v1688371849') is unusual and will be skipped for safety reasons.")
+        })
+        var options = DownloadOptions.default
+        options.embedThumbnail = true
+        options.downloadThumbnail = true
+        do {
+            _ = try await service.download(url: "https://example.com/video", options: options,
+                                           onProgress: { _, _, _ in }, onOutput: { _ in })
+            XCTFail("A refused extension that is not the thumbnail must still fail")
+        } catch {}
+        let thumbnailFlags: Set<String> = ["--embed-thumbnail", "--write-thumbnail", "--convert-thumbnails"]
+        XCTAssertGreaterThanOrEqual(runs.value.count, 2)
+        XCTAssertTrue(runs.value[0].contains("--embed-thumbnail"))
+        XCTAssertTrue(runs.value[0].contains("--write-thumbnail"))
+        XCTAssertTrue(runs.value.dropFirst().allSatisfy { thumbnailFlags.isDisjoint(with: $0) })
+    }
+
     func testForbiddenDownloadOffersRetryAndShowsTheRealErrorFirst() throws {
         let lang = LanguageService()
         let download = Download(url: "https://example.com/video", options: .default)
