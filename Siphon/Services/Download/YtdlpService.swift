@@ -2413,6 +2413,7 @@ public struct DownloadResult: Sendable {
             case retryTransientNetworkError
             case disableAria2c
             case retryPhantomJSChallenge
+            case dropYtdlpThumbnails
         }
 
         var triedStrategies = Set<DownloadRecoveryStrategy>()
@@ -2446,6 +2447,22 @@ public struct DownloadResult: Sendable {
                     errText = msg
                 default:
                     errText = ""
+                }
+
+                // A cover URL with a cache-buster suffix (".jpg.v123") makes yt-dlp
+                // refuse the guessed extension and abort before the video starts.
+                // Fresh extraction returns the same URL, so let Siphon's own poster
+                // fetch handle the cover, embed and sidecar instead.
+                if Self.isUnsafeExtensionError(errText),
+                   !triedStrategies.contains(.dropYtdlpThumbnails) {
+                    let withoutThumbnails = Self.argumentsWithoutThumbnailFlags(currentArgs)
+                    if withoutThumbnails != currentArgs {
+                        triedStrategies.insert(.dropYtdlpThumbnails)
+                        LoggerService.shared.log("yt-dlp refused an unusual extension; retrying without its thumbnail handling", level: .info)
+                        onOutput("[Siphon Info] Retrying without yt-dlp's thumbnail step...\n")
+                        currentArgs = withoutThumbnails
+                        continue
+                    }
                 }
 
                 // Strategy 0: Reused metadata failed (for example an expired stream URL)
@@ -7555,6 +7572,32 @@ public struct DownloadResult: Sendable {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         let domains = ["pornhub.com", "pornhubpremium.com", "phncdn.com"]
         return domains.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    nonisolated static func isUnsafeExtensionError(_ text: String) -> Bool {
+        let lower = text.lowercased()
+        return lower.contains("the extracted extension") && lower.contains("is unusual")
+    }
+
+    nonisolated static func argumentsWithoutThumbnailFlags(_ args: [String]) -> [String] {
+        var result: [String] = []
+        var index = args.startIndex
+        while index < args.endIndex {
+            let arg = args[index]
+            if arg == "--" {
+                result.append(contentsOf: args[index...])
+                break
+            }
+            if arg == "--embed-thumbnail" || arg == "--write-thumbnail" {
+                index += 1
+            } else if arg == "--convert-thumbnails" {
+                index += 2
+            } else {
+                result.append(arg)
+                index += 1
+            }
+        }
+        return result
     }
 
     nonisolated static func isPhantomJSError(_ errorTextOrError: Any) -> Bool {
