@@ -159,10 +159,10 @@ extension MediaInfo {
     }
 
     public var durationString: String? {
-        guard let duration = duration else { return nil }
-        let hours = Int(duration) / 3600
-        let minutes = (Int(duration) % 3600) / 60
-        let seconds = Int(duration) % 60
+        guard let duration = duration?.displayInteger else { return nil }
+        let hours = duration / 3600
+        let minutes = (duration % 3600) / 60
+        let seconds = duration % 60
 
         if hours > 0 {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)

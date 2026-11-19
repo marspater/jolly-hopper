@@ -203,6 +203,7 @@ struct PreferencesView: View {
             Button(languageService.s("restart_siphon")) {
                 restartSiphon()
             }
+            Button(languageService.s("later"), role: .cancel) {}
         } message: {
             Text(languageService.s("update_ready_message"))
         }

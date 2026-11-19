@@ -1961,6 +1961,8 @@ public struct DownloadResult: Sendable {
         }
         let normalizedURL = normalizeURLForYtdlp(url)
         var targetURL = normalizedURL
+        var formatOptions = options
+        var formatMediaInfo = mediaInfo
         var customResolvedTitle: String? = nil
         var customEmbedURL: String? = nil
         var customThumbnailURL: String? = nil
@@ -2030,6 +2032,14 @@ public struct DownloadResult: Sendable {
                 media = try await resolvePlayerCaptureMediaInfo(
                     url: normalizedURL, site: captureSite, path: path.path, proxy: EgressBoundary.proxyURL
                 )
+                // A new capture may come from another player: pick formats from it,
+                // and drop a chosen format id that this stream doesn't offer.
+                formatMediaInfo = media
+                let offered = Set(media.formats?.map(\.formatId) ?? [])
+                if let chosen = formatOptions.selectedFormatId,
+                   !chosen.split(separator: "+").allSatisfy({ offered.contains(String($0)) }) {
+                    formatOptions.selectedFormatId = nil
+                }
             }
             targetURL = media.manifestUrl ?? targetURL
             customResolvedTitle = media.title
@@ -2138,12 +2148,15 @@ public struct DownloadResult: Sendable {
             await findFfmpeg()
         }
 
-        let appSupport = Self.getAppSupportDirectory()
+        // Only a verified pair may run: never fall back to unverified App Support binaries.
+        // Injected test runners execute nothing, and findFfmpeg skips them too.
         let ffmpegDir: String
         if let loc = ffmpegPath?.deletingLastPathComponent().path, FileManager.default.fileExists(atPath: loc + "/ffmpeg") {
             ffmpegDir = loc
+        } else if !(processRunner is DefaultYtdlpProcessRunner) {
+            ffmpegDir = Self.getAppSupportDirectory().path
         } else {
-            ffmpegDir = appSupport.path
+            throw YtdlpError.ffmpegInstallationFailed(Self.getAppSupportDirectory().path)
         }
         args.append(contentsOf: ["--ffmpeg-location", ffmpegDir])
 
@@ -2187,7 +2200,7 @@ public struct DownloadResult: Sendable {
         // Let yt-dlp inspect HLS encryption before choosing a downloader.
         // Forcing FFmpeg skips its FairPlay/DRM rejection and can copy encrypted samples.
 
-        args.append(contentsOf: buildFormatArgs(url: url, options: options, mediaInfo: mediaInfo, deferPostprocessing: bestCamDecryptionKey != nil))
+        args.append(contentsOf: buildFormatArgs(url: url, options: formatOptions, mediaInfo: formatMediaInfo, deferPostprocessing: bestCamDecryptionKey != nil))
         let codecFallbackWarnings = codecFallbackOutputWarnings(options: options)
         if options.downloadSubtitles {
             let subFormat = options.subtitleFormat?.ytdlpValue ?? "srt"
@@ -2963,7 +2976,7 @@ public struct DownloadResult: Sendable {
     /// A finished file's video height, for sources whose metadata has none, or
     /// nil when ffprobe fails. The short side, matching `MediaFormat.parsedHeight`.
     func probeVideoHeight(_ file: URL) async -> Int? {
-        let ffmpegDir = ffmpegPath?.deletingLastPathComponent() ?? Self.getAppSupportDirectory()
+        guard let ffmpegDir = ffmpegPath?.deletingLastPathComponent() else { return nil }
         do {
             // Bounded: a hung probe must not keep a finished download in its slot.
             let output = try await runMetadataCommand([
@@ -4764,7 +4777,7 @@ public struct DownloadResult: Sendable {
     /// Executes BoyfriendTV's JavaScript challenge in a real browser engine.
     /// The website data store is non-persistent but shared across main/embed loads so
     /// short-lived Cloudflare clearance cookies can be reused during one app session.
-    private func loadBoyfriendTVRenderedPage(_ url: URL, stage: String, rawCookies: String? = nil) async throws -> String? {
+    private func loadBoyfriendTVRenderedPage(_ url: URL, stage: String, rawCookies: String? = nil, browserSource: String?) async throws -> String? {
         guard (url.scheme == "https" || url.scheme == "http"),
               url.user == nil,
               url.password == nil,
@@ -4795,17 +4808,18 @@ public struct DownloadResult: Sendable {
         }
         let requestedAt = Date()
         return try await withExclusiveWebKitSession(site: "boyfriendtv") {
-            try await renderBoyfriendTVPage(url, stage: stage, rawCookies: rawCookies, requestedAt: requestedAt)
+            try await renderBoyfriendTVPage(url, stage: stage, rawCookies: rawCookies, browserSource: browserSource, requestedAt: requestedAt)
         }
     }
 
-    private func renderBoyfriendTVPage(_ url: URL, stage: String, rawCookies: String?, requestedAt: Date) async throws -> String? {
+    private func renderBoyfriendTVPage(_ url: URL, stage: String, rawCookies: String?, browserSource: String?, requestedAt: Date) async throws -> String? {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = boyfriendTVWebDataStore
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
 
         await seedBoyfriendTVWebKitCookies(rawCookies, for: url)
-        if configuredBrowserCookieSource() == "safari" {
+        // The download's own login source (e.g. the Safari extension), not only the global setting.
+        if browserSource == "safari" {
             await seedBoyfriendTVSafariSession()
         }
 
@@ -5229,7 +5243,8 @@ public struct DownloadResult: Sendable {
                 guard let rendered = try await loadBoyfriendTVRenderedPage(
                     candidatePage,
                     stage: stage,
-                    rawCookies: scopedCookies
+                    rawCookies: scopedCookies,
+                    browserSource: effectiveBrowserSource
                 ) else {
                     continue
                 }
@@ -5413,7 +5428,8 @@ public struct DownloadResult: Sendable {
                     if let rendered = try await loadBoyfriendTVRenderedPage(
                         embedPageURL,
                         stage: "embed-webkit",
-                        rawCookies: scopedCookies
+                        rawCookies: scopedCookies,
+                        browserSource: effectiveBrowserSource
                     ) {
                         if isBoyfriendTVChallengeHTML(rendered) {
                             webKitChallengeTimedOut = true
@@ -7632,8 +7648,7 @@ public struct DownloadResult: Sendable {
               usesBrowserTransport(url), !isEpornerURL(url),
               !usingBrowserCookies, !forceBrowserCookies,
               let browser = selectedBrowser, !isCookieDenied(browser: browser, url: url) else { return false }
-        let message = String(describing: error)
-            .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression).lowercased()
+        let message = Self.keywordMatchableErrorText(String(describing: error))
         return message.containsAny(["403", "401", "sign in", "login", "cloudflare", "challenge"])
     }
 
@@ -7643,13 +7658,7 @@ public struct DownloadResult: Sendable {
         browserCookieSource: String? = nil
     ) -> Error {
         let errString = "\(error)"
-        // Keyword checks must not match the video's own URL or slug: yt-dlp
-        // prefixes errors with "[extractor] <id>:", and the generic id is the
-        // page slug (e.g. "gym-challenge-1403" would read as a 403 challenge).
-        let lowerErr = errString
-            .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression)
-            .replacingOccurrences(of: #"(\[[\w:-]+\]) [^\s:]+:"#, with: "$1 [id]:", options: .regularExpression)
-            .lowercased()
+        let lowerErr = Self.keywordMatchableErrorText(errString)
         let configuredBrowser = Self.validatedBrowserCookieSource(browserCookieSource) ?? configuredBrowserCookieSource()
 
         if (configuredBrowser == "safari" || configuredBrowser == nil) && isSafariPermissionError(errString) {
@@ -7766,9 +7775,19 @@ public struct DownloadResult: Sendable {
         return error
     }
 
+    /// Lowercased error text with URLs and the "[extractor] <id>:" prefix removed.
+    /// Keyword checks must not match the video's own URL or slug: the generic id is
+    /// the page slug (e.g. "gym-challenge-1403" would read as a 403 challenge).
+    nonisolated static func keywordMatchableErrorText(_ text: String) -> String {
+        text
+            .replacingOccurrences(of: #"https?://[^\s\"]+"#, with: "[URL]", options: .regularExpression)
+            .replacingOccurrences(of: #"(\[[\w:-]+\]) [^\s:]+:"#, with: "$1 [id]:", options: .regularExpression)
+            .lowercased()
+    }
+
     private func isRangeError(_ text: String) -> Bool {
-        let lower = text.lowercased()
-        if text.contains("416") || lower.contains("requested range not satisfiable") {
+        let lower = Self.keywordMatchableErrorText(text)
+        if lower.range(of: #"\b416\b"#, options: .regularExpression) != nil || lower.contains("requested range not satisfiable") {
             return true
         }
         if lower.contains("byte range") || lower.contains("byte ranges") {
@@ -8104,8 +8123,6 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--add-header", "Referer: https://www.pussyspace.com/"])
             args.append(contentsOf: ["--add-header", "Origin: https://www.pussyspace.com"])
             args.append(contentsOf: ["--add-header", "Accept: */*"])
-        } else if parsedHost == "single-stream video site.com" || parsedHost.hasSuffix(".single-stream video site.com") {
-            args.append(contentsOf: ["--add-header", "Referer:https://single-stream video site.com/"])
         } else if lowerUrl.contains(".m3u8") || lowerUrl.contains(".mpd") {
             args.append(contentsOf: ["--hls-use-mpegts"])
             if Self.requiresHlsVariantQuery(url) {

@@ -67,7 +67,7 @@ public struct VideoFormat: Codable, Identifiable, Hashable, Sendable {
     public var displayName: String {
         var parts: [String] = []
         if let res = resolution { parts.append(res) }
-        if let fps = fps { parts.append("\(Int(fps))fps") }
+        if let fps = fps?.displayInteger { parts.append("\(fps)fps") }
         if let codec = vcodec { parts.append(codec) }
         return parts.isEmpty ? id : parts.joined(separator: " • ")
     }

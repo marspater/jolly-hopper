@@ -44,6 +44,9 @@ struct DownloadListView: View {
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var appState: AppState
     @State private var scrollActivity = ListScrollActivity()
+    /// Hosted here, not on the row: a row leaves this list when its status changes,
+    /// which would close a sheet the user is still reading.
+    @State private var presentedSheet: DownloadRowSheet?
 
     var body: some View {
         Group {
@@ -64,6 +67,17 @@ struct DownloadListView: View {
                     scrollActivity.isScrolling = phase != .idle
                 }
                 .environment(\.listScrollActivity, scrollActivity)
+                .environment(\.presentDownloadRowSheet) { presentedSheet = $0 }
+            }
+        }
+        .sheet(item: $presentedSheet) { sheet in
+            switch sheet.kind {
+            case .log:
+                DownloadLogSheet(download: sheet.download)
+                    .environmentObject(languageService)
+            case .diagnostics:
+                DownloadDiagnosticsView(download: sheet.download)
+                    .environmentObject(languageService)
             }
         }
     }
@@ -112,12 +126,12 @@ struct DownloadRowView: View {
     @State private var recoveredArguments = ""
     @FocusState private var isRecoveredArgumentsFocused: Bool
     @State private var showDiagnostics = false
-    @StateObject private var logCopyFeedback = TransientFeedbackState()
     @StateObject private var errorCopyFeedback = TransientFeedbackState()
     @State private var showRawError = false
     /// nil until checked; unknown counts as present so actions don't flicker.
     @State private var primaryFileIsPresent: Bool?
     @Environment(\.listScrollActivity) private var scrollActivity
+    @Environment(\.presentDownloadRowSheet) private var presentDownloadRowSheet
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -256,7 +270,8 @@ struct DownloadRowView: View {
             rowContextMenu
         }
         .sheet(isPresented: $showLog) {
-            logSheet
+            DownloadLogSheet(download: download)
+                .environmentObject(languageService)
         }
         .sheet(isPresented: $showDiagnostics) {
             DownloadDiagnosticsView(download: download)
@@ -431,7 +446,7 @@ struct DownloadRowView: View {
                                 Spacer()
 
                                 Button {
-                                    showLog = true
+                                    openLog()
                                 } label: {
                                     HStack(spacing: 3) {
                                         Image(systemName: "doc.text")
@@ -756,7 +771,7 @@ struct FileThumbnailView: View {
                     }
 
                     Button {
-                        showDiagnostics = true
+                        openDiagnostics()
                     } label: {
                         Label(languageService.s("view_diagnostics"), systemImage: "cpu")
                     }
@@ -775,7 +790,7 @@ struct FileThumbnailView: View {
                     }
 
                     Button {
-                        showLog = true
+                        openLog()
                     } label: {
                         Label(languageService.s("log"), systemImage: "doc.text")
                     }
@@ -828,7 +843,7 @@ struct FileThumbnailView: View {
                     }
 
                     Button {
-                        showLog = true
+                        openLog()
                     } label: {
                         Label(languageService.s("log"), systemImage: "doc.text")
                     }
@@ -972,7 +987,7 @@ struct FileThumbnailView: View {
                     }
 
                     Button {
-                        showLog = true
+                        openLog()
                     } label: {
                         Label(languageService.s("log"), systemImage: "doc.text")
                     }
@@ -1143,7 +1158,7 @@ struct FileThumbnailView: View {
         }
 
         Button {
-            showDiagnostics = true
+            openDiagnostics()
         } label: {
             Label(languageService.s("view_diagnostics"), systemImage: "cpu")
         }
@@ -1265,7 +1280,7 @@ struct FileThumbnailView: View {
         }
 
         Button {
-            showLog = true
+            openLog()
         } label: {
             Label(languageService.s("log"), systemImage: "doc.text")
         }
@@ -1280,12 +1295,42 @@ struct FileThumbnailView: View {
         .accessibilityIdentifier(AccessibilityID.rowRemove)
     }
 
+    private func openLog() {
+        if let present = presentDownloadRowSheet {
+            present(DownloadRowSheet(download: download, kind: .log))
+        } else {
+            showLog = true
+        }
+    }
+
+    private func openDiagnostics() {
+        if let present = presentDownloadRowSheet {
+            present(DownloadRowSheet(download: download, kind: .diagnostics))
+        } else {
+            showDiagnostics = true
+        }
+    }
+}
+
+struct DownloadRowSheet: Identifiable {
+    enum Kind { case log, diagnostics }
+    let download: Download
+    let kind: Kind
+    var id: String { "\(download.id)-\(kind)" }
+}
+
+struct DownloadLogSheet: View {
+    @ObservedObject var download: Download
+    @EnvironmentObject var languageService: LanguageService
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var logCopyFeedback = TransientFeedbackState()
+
     private var logEntryCountText: String {
         let count = download.log.split(whereSeparator: \.isNewline).count
         return count == 1 ? languageService.s("log_entry_count_one") : String(format: languageService.s("log_entry_count"), count)
     }
 
-    private var logSheet: some View {
+    var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack(spacing: SiphonTheme.spacing12) {
@@ -1351,7 +1396,7 @@ struct FileThumbnailView: View {
                 Spacer()
 
                 Button(languageService.s("done")) {
-                    showLog = false
+                    dismiss()
                 }
                 .buttonStyle(.siphonPrimary)
                 .keyboardShortcut(.cancelAction)
@@ -1414,6 +1459,7 @@ final class ListScrollActivity {
 
 extension EnvironmentValues {
     @Entry var listScrollActivity: ListScrollActivity?
+    @Entry var presentDownloadRowSheet: (@MainActor (DownloadRowSheet) -> Void)?
 }
 
 extension Bool? {
