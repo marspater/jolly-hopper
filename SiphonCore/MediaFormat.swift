@@ -275,10 +275,10 @@ extension MediaFormat {
         if let vcodec = vcodec, vcodec != "none" { parts.append(vcodec) }
         if let acodec = acodec, acodec != "none" { parts.append(acodec) }
         if let lang = language, !lang.isEmpty { parts.append("[\(lang)]") }
-        if let abr = abr, abr > 0 {
-            if let kbps = abr.displayInteger { parts.append("\(kbps)k") }
-        } else if let tbr = tbr, tbr > 0, vbr == nil || vbr == 0 {
-            if let kbps = tbr.displayInteger { parts.append("\(kbps)k") }
+        if let abr = abr, abr > 0, let kbps = abr.displayInteger {
+            parts.append("\(kbps)k")
+        } else if let tbr = tbr, tbr > 0, vbr == nil || vbr == 0, let kbps = tbr.displayInteger {
+            parts.append("\(kbps)k")
         }
         if let size = filesize ?? filesizeApprox, size > 0 {
             let megabytes = Double(size) / (1024.0 * 1024.0)
