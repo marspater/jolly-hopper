@@ -402,7 +402,7 @@ struct HeroDropURLView: View {
             // Only .txt lists are read; any other file gets the same feedback as an empty list.
             let urls: [String] = {
                 guard let fURL = fileURL, fURL.pathExtension.lowercased() == "txt",
-                      let content = try? String(contentsOf: fURL, encoding: .utf8) else { return [] }
+                      let content = AddDownloadView.readURLList(at: fURL) else { return [] }
                 return DownloadURLValidator.extractURLs(from: content)
             }()
             Task { @MainActor in

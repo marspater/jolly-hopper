@@ -108,6 +108,21 @@ enum ChromiumCookieReader {
         return root.appendingPathComponent(profile, isDirectory: true)
     }
 
+    /// Short-link and legacy hosts whose sign-in cookies live on another site's domain.
+    /// yt-dlp follows these to the canonical site, so its cookies must be exported too.
+    private static let cookieHostAliases: [String: String] = [
+        "youtu.be": "www.youtube.com",
+        "twitter.com": "x.com",
+        "www.twitter.com": "x.com",
+        "mobile.twitter.com": "x.com"
+    ]
+
+    /// The target host plus its canonical alias, if any.
+    static func cookieHosts(for host: String) -> [String] {
+        let host = host.lowercased()
+        return [host] + (cookieHostAliases[host].map { [$0] } ?? [])
+    }
+
     static func matches(host: String, domain: String) -> Bool {
         let domain = domain.lowercased()
         let host = host.lowercased()
@@ -282,6 +297,7 @@ enum ChromiumCookieReader {
         root: URL,
         password: () throws -> Data
     ) throws -> SecureCookieFile? {
+        let hosts = cookieHosts(for: host)
         let profile = try profileDirectory(root: root)
         let candidates = [profile.appendingPathComponent("Network/Cookies"), profile.appendingPathComponent("Cookies")]
         guard let database = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
@@ -331,7 +347,7 @@ enum ChromiumCookieReader {
             if status == SQLITE_DONE { break }
             guard status == SQLITE_ROW else { throw failure("Could not read the browser cookie database.") }
             guard let domain = string(0), let name = string(1), let path = string(4),
-                  matches(host: host, domain: domain) else { continue }
+                  hosts.contains(where: { matches(host: $0, domain: domain) }) else { continue }
             let expiry = sqlite3_column_int(statement, 8) == 0 ? 0 :
                 sqlite3_column_int64(statement, 5) / 1_000_000 - 11_644_473_600
             guard expiry == 0 || expiry > Int64(Date().timeIntervalSince1970) else { continue }

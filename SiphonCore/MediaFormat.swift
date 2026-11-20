@@ -271,14 +271,14 @@ extension MediaFormat {
     public var displaySummary: String {
         var parts: [String] = []
         if let res = resolution, !res.isEmpty { parts.append(res) }
-        if let fps = fps, fps > 0 { parts.append("\(Int(fps))fps") }
+        if let fps = fps?.displayInteger, fps > 0 { parts.append("\(fps)fps") }
         if let vcodec = vcodec, vcodec != "none" { parts.append(vcodec) }
         if let acodec = acodec, acodec != "none" { parts.append(acodec) }
         if let lang = language, !lang.isEmpty { parts.append("[\(lang)]") }
-        if let abr = abr, abr > 0 {
-            parts.append("\(Int(abr))k")
-        } else if let tbr = tbr, tbr > 0, vbr == nil || vbr == 0 {
-            parts.append("\(Int(tbr))k")
+        if let abr = abr, abr > 0, let kbps = abr.displayInteger {
+            parts.append("\(kbps)k")
+        } else if let tbr = tbr, tbr > 0, vbr == nil || vbr == 0, let kbps = tbr.displayInteger {
+            parts.append("\(kbps)k")
         }
         if let size = filesize ?? filesizeApprox, size > 0 {
             let megabytes = Double(size) / (1024.0 * 1024.0)
@@ -305,5 +305,13 @@ public struct ChapterInfo: Codable, Sendable {
         case startTime = "start_time"
         case endTime = "end_time"
         case title
+    }
+}
+
+extension Double {
+    /// Whole-number value for display, or nil when it cannot become an `Int`
+    /// (NaN, infinite, negative or beyond `Int.max`, all of which a hostile page can supply).
+    var displayInteger: Int? {
+        isFinite && self >= 0 && self < Double(Int.max) ? Int(self) : nil
     }
 }

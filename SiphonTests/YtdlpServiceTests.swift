@@ -1233,6 +1233,27 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertTrue(ChromiumCookieReader.matches(host: "sub.example.com", domain: ".example.com"))
     }
 
+    func testChromiumCookieExportIncludesCanonicalHostForShortLinks() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let profile = root.appendingPathComponent("Default", isDirectory: true)
+        try FileManager.default.createDirectory(at: profile, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        var db: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(profile.appendingPathComponent("Cookies").path, &db), SQLITE_OK)
+        defer { sqlite3_close(db) }
+        let sql = """
+        CREATE TABLE meta(key TEXT, value TEXT);
+        INSERT INTO meta VALUES ('version','24');
+        CREATE TABLE cookies(host_key TEXT, name TEXT, value TEXT, encrypted_value BLOB, path TEXT, expires_utc INTEGER, is_secure INTEGER, is_httponly INTEGER, has_expires INTEGER);
+        INSERT INTO cookies VALUES('.youtube.com','SID','fixture',X'','/',0,1,1,0);
+        """
+        XCTAssertEqual(sqlite3_exec(db, sql, nil, nil, nil), SQLITE_OK)
+        let file = try XCTUnwrap(ChromiumCookieReader.export(for: URL(string: "https://youtu.be/abc")!, root: root, password: { Data() }))
+        defer { file.cleanup() }
+        XCTAssertTrue(try String(contentsOf: file.fileURL, encoding: .utf8).contains("SID\tfixture"))
+        XCTAssertNil(try ChromiumCookieReader.export(for: URL(string: "https://evil-youtu.be/abc")!, root: root, password: { Data() }))
+    }
+
     func testHeliumDecryptKnownChromiumCookieAndRejectWrongDomain() throws {
         // Independent AES-CBC/PBKDF2 fixture: password=fixture, domain=.example.com, value=session-value.
         let encrypted = Data(base64Encoded: "djEwl0EKULQ4rr5F8E9Nz4uDN1OehYLX5wjFTdUkTSwHkt/wtYh0HJF26qMCeN9zWSql")!

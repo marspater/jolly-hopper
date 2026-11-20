@@ -598,6 +598,7 @@ final class DownloadExecutorTests: XCTestCase {
         })
         let service = YtdlpService(processRunner: runner)
         service.ytdlpPath = URL(fileURLWithPath: "/usr/local/bin/yt-dlp")
+        service.ffmpegPath = URL(fileURLWithPath: "/usr/local/bin/ffmpeg")
         let delegate = MockDelegate()
         let executor = DownloadExecutor(ytdlpService: service, delegate: delegate)
         var options = DownloadOptions.default

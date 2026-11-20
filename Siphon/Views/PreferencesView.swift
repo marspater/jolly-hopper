@@ -203,6 +203,9 @@ struct PreferencesView: View {
             Button(languageService.s("restart_siphon")) {
                 restartSiphon()
             }
+            Button(languageService.s("later"), role: .cancel) {
+                // Dismissing is enough; the update applies on the next launch.
+            }
         } message: {
             Text(languageService.s("update_ready_message"))
         }

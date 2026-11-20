@@ -1718,14 +1718,15 @@ struct AddDownloadView: View {
     }
 
     private func loadPlaylist() {
+        let playlistURL = urlInput.trimmingCharacters(in: .whitespacesAndNewlines)
         playlistTask?.cancel()
         isLoadingPlaylist = true
         errorMessage = nil
         playlistTask = Task {
             do {
-                let session = appState.browserSession(for: urlInput)
+                let session = appState.browserSession(for: playlistURL)
                 let items = try await downloadManager.ytdlpService.fetchPlaylistInfo(
-                    url: urlInput,
+                    url: playlistURL,
                     rawCookies: session?.rawCookies,
                     rawUserAgent: session?.rawUserAgent,
                     browserCookieSource: session?.browserCookieSource,
