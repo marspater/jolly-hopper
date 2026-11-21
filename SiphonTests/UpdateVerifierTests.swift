@@ -1092,7 +1092,8 @@ struct UpdateErrorLocalizationTests {
         ]
         for (error, key) in cases {
             let template = LanguageService.s(key)
-            #expect(template != key, "missing translation for \(key)")
+            // s() falls back to the key's words, capitalized, when no translation exists.
+            #expect(template != key.replacingOccurrences(of: "_", with: " ").capitalized, "missing translation for \(key)")
             #expect(error.localizedDescription.hasPrefix(template.components(separatedBy: "%").first ?? template), "\(key)")
         }
     }

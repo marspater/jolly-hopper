@@ -81,6 +81,12 @@ public final class DownloadHistoryStore {
                     }
                 }
                 if encoded.count > Self.maxEncodedHistoryBytes { encoded = try JSONEncoder().encode(trimmed) }
+                if encoded.count > Self.maxEncodedHistoryBytes {
+                    // Live entries alone are too large: their logs go too, so the
+                    // entries themselves still persist.
+                    for index in trimmed.indices { trimmed[index].log = "" }
+                    encoded = try JSONEncoder().encode(trimmed)
+                }
                 log("Download history exceeded the preferences size limit; trimmed old logs.", .warning)
             }
             userDefaults.set(encoded, forKey: historyKey)

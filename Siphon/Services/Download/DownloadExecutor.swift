@@ -128,19 +128,33 @@ extension URLSession {
             // The proxy strips it before forwarding (hop-by-hop).
             request.setValue(authorization, forHTTPHeaderField: "Proxy-Authorization")
         }
-        let (bytes, response) = try await self.bytes(for: request, delegate: delegate)
-        guard response.expectedContentLength <= limit else { throw URLError(.dataLengthExceedsMaximum) }
-        var data = Data()
-        data.reserveCapacity(Int(max(0, response.expectedContentLength)))
+        let outgoing = request
         // The request timeout is per idle interval, so a body trickled one byte
         // at a time would otherwise hold the caller for as long as the sender likes.
+        // A timer child cancels the read, covering the response wait and stalled
+        // reads; the per-byte check makes an already-expired deadline deterministic.
         let expiry = ContinuousClock.now.advanced(by: deadline)
-        for try await byte in bytes {
-            data.append(byte)
-            if data.count > limit { throw URLError(.dataLengthExceedsMaximum) }
-            if ContinuousClock.now >= expiry { throw URLError(.timedOut) }
+        return try await withThrowingTaskGroup(of: (Data, URLResponse).self) { group in
+            group.addTask {
+                let (bytes, response) = try await self.bytes(for: outgoing, delegate: delegate)
+                guard response.expectedContentLength <= limit else { throw URLError(.dataLengthExceedsMaximum) }
+                var data = Data()
+                data.reserveCapacity(Int(max(0, response.expectedContentLength)))
+                for try await byte in bytes {
+                    data.append(byte)
+                    if data.count > limit { throw URLError(.dataLengthExceedsMaximum) }
+                    if ContinuousClock.now >= expiry { throw URLError(.timedOut) }
+                }
+                return (data, response)
+            }
+            group.addTask {
+                try await Task.sleep(until: expiry, clock: .continuous)
+                throw URLError(.timedOut)
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else { throw URLError(.timedOut) }
+            return result
         }
-        return (data, response)
     }
 }
 

@@ -198,6 +198,38 @@ final class EgressProxyTests: XCTestCase {
         }
     }
 
+    func testBoundedDataDeadlineCoversAServerThatNeverResponds() async throws {
+        // A listener that never accepts: the kernel completes the handshake and
+        // the request sits unanswered, so only the deadline can end the wait.
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        XCTAssertGreaterThanOrEqual(fd, 0)
+        defer { close(fd) }
+        var addr = sockaddr_in()
+        addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1")
+        var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+        let bound = withUnsafeMutablePointer(to: &addr) {
+            $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                Darwin.bind(fd, $0, length) == 0 && Darwin.listen(fd, 4) == 0 && Darwin.getsockname(fd, $0, &length) == 0
+            }
+        }
+        XCTAssertTrue(bound)
+        let port = UInt16(bigEndian: addr.sin_port)
+
+        let start = ContinuousClock.now
+        do {
+            _ = try await URLSession.shared.boundedData(
+                for: URLRequest(url: URL(string: "http://127.0.0.1:\(port)/")!),
+                deadline: .milliseconds(300)
+            )
+            XCTFail("A server that never responds must not hold the caller")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .timedOut)
+        }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(10))
+    }
+
     func testProxyBlocksDirectLoopbackConnection() async throws {
         let proxy = EgressProxyServer()
         let proxyPort = try await proxy.start()

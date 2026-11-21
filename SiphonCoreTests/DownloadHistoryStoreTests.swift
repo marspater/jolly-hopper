@@ -301,4 +301,24 @@ final class DownloadHistoryStoreTests: XCTestCase {
         #expect(loaded.count == 500)
         #expect(try #require(loaded.first { $0.status == .paused }).log.isEmpty == false)
     }
+
+    @Test func oversizedLiveEntriesStillPersistWithoutLogs() throws {
+        let suiteName = "test.history.size.live.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let key = "test_history_oversized_live"
+        let store = DownloadHistoryStore(userDefaults: defaults, historyKey: key)
+        var history: [HistoricDownload] = []
+        for i in 0..<150 {
+            let dl = Download(url: "https://example.com/video/\(i)", options: .default, title: "Video \(i)")
+            dl.status = .paused
+            dl.log = String(repeating: "x", count: 30_000)
+            store.addToHistory(dl, history: &history, skipSave: true)
+        }
+        store.saveHistory(history)
+
+        let data = try #require(defaults.data(forKey: key))
+        #expect(data.count <= DownloadHistoryStore.maxEncodedHistoryBytes)
+        #expect(store.loadHistory().count == 150)
+    }
 }
