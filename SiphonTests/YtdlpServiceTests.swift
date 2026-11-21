@@ -1,10 +1,12 @@
 import XCTest
+import Foundation
 import SQLite3
 import CryptoKit
 import WebKit
 import AppKit
 import Security
 import VideoToolbox
+import Testing
 @testable import Siphon
 @testable import SiphonCore
 
@@ -7727,5 +7729,90 @@ final class YtdlpServiceTests: XCTestCase {
         XCTAssertEqual(YtdlpService.assumedWidescreenResolution(height: 720), "1280x720")
         XCTAssertEqual(YtdlpService.assumedWidescreenResolution(height: Int.max), "29127x16384")
         XCTAssertEqual(YtdlpService.assumedWidescreenResolution(height: -5), "0x0")
+    }
+}
+
+@Suite struct YtdlpErrorLocalizationTests {
+    @Test(arguments: ["cookie_prepare_failed", "scratch_directory_failed", "stream_decryption_io_failed"])
+    func causeFailureMessagesComeFromTheirKey(key: String) {
+        let cause = NSError(domain: "t", code: 1, userInfo: [NSLocalizedDescriptionKey: "disk full"])
+        let message = YtdlpError.downloadFailed(key: key, cause: cause).errorDescription ?? ""
+        #expect(message == String(format: LanguageService.s(key), "disk full"))
+        #expect(message.contains("disk full"))
+        #expect(!message.hasPrefix(key.replacingOccurrences(of: "_", with: " ").capitalized))
+    }
+}
+
+@Suite struct BestCamStreamCipherTests {
+    @Test func keyIsTheMD5HexOfTheName() {
+        #expect(YtdlpService.BestCamStreamCipher.deriveKeyHex(from: "") == "d41d8cd98f00b204e9800998ecf8427e")
+        #expect(YtdlpService.BestCamStreamCipher.deriveKeyHex(from: "abc") == "900150983cd24fb0d6963f7d28e17f72")
+    }
+}
+
+@Suite struct YtdlpErrorKeyCoverageTests {
+    static let keys = [
+        "ytdlp_err_twinkaboo_plays_this_video_through",
+        "ytdlp_err_yt_dlp_returned_playlist_data",
+        "ytdlp_err_recu_me_recordings_can_t",
+        "ytdlp_err_advanced_arguments_contain_an_unterminated",
+        "ytdlp_err_download_failed_across_all_recovery",
+        "ytdlp_err_recu_me_refused_playback_for",
+        "ytdlp_err_recu_me_requires_a_confirmed",
+        "ytdlp_err_recu_me_has_temporarily_restricted",
+        "ytdlp_err_recu_me_did_not_return",
+        "ytdlp_err_recu_me_did_not_answer",
+        "ytdlp_err_recu_me_verification_or_sign",
+        "ytdlp_err_recu_me_s_player_did",
+        "ytdlp_err_recu_me_rejected_the_refreshed",
+        "ytdlp_err_unsupported_protected_site_url_expected",
+        "ytdlp_err_the_window_was_closed_so",
+        "ytdlp_err_the_window_was_closed_before",
+        "ytdlp_err_no_video_started_on_within",
+        "ytdlp_err_unsupported_url",
+        "ytdlp_err_the_protected_site_denied_access",
+        "ytdlp_err_invalid_stream_decryption_key",
+        "ytdlp_err_failed_to_initialize_stream_decryptor",
+        "ytdlp_err_failed_to_create_temporary_file",
+        "ytdlp_err_failed_to_open_file_handles",
+        "ytdlp_err_stream_decryption_update_failed",
+        "ytdlp_err_the_site_presented_an_anti",
+        "ytdlp_err_this_video_is_unavailable_private",
+        "ytdlp_err_the_protected_site_denied_access_2",
+        "ytdlp_err_could_not_extract_a_media",
+        "ytdlp_err_could_not_resolve_this_protected",
+        "ytdlp_err_could_not_resolve_the_protected",
+        "ytdlp_err_the_protected_site_denied_access_3",
+        "ytdlp_err_could_not_resolve_this_starwank",
+        "ytdlp_err_starwank_denied_access_http_the",
+        "ytdlp_err_could_not_resolve_this_pussyspace",
+        "ytdlp_err_pussyspace_denied_access_http_the",
+        "ytdlp_err_youtube_requires_authentication_or_browser",
+        "ytdlp_err_s_players_didn_t_load",
+        "ytdlp_err_none_of_the_videos_s",
+        "ytdlp_err_not_found",
+        "ytdlp_err_parse",
+        "ytdlp_err_command_failed",
+        "ytdlp_err_download_failed",
+        "ytdlp_err_too_many_requests",
+        "ytdlp_err_subtitle",
+        "ytdlp_err_cloudflare",
+        "ytdlp_err_ffmpeg_install",
+        "ytdlp_err_needs_browser_cookies",
+        "ytdlp_err_login_required",
+        "ytdlp_err_security_violation"
+    ]
+
+    @Test(arguments: keys)
+    func keyHasATranslation(key: String) {
+        // A missing key falls back to its own capitalized name.
+        #expect(LanguageService.s(key) != key.replacingOccurrences(of: "_", with: " ").capitalized)
+    }
+
+    @Test func fixedErrorsUseTheirKey() {
+        #expect(YtdlpError.cloudflareBlocked.errorDescription == LanguageService.s("ytdlp_err_cloudflare"))
+        #expect(YtdlpError.notFound.errorDescription == LanguageService.s("ytdlp_err_not_found"))
+        #expect(YtdlpError.downloadFailed("").errorDescription == LanguageService.s("ytdlp_err_download_failed"))
+        #expect(YtdlpError.commandFailed("boom").errorDescription == String(format: LanguageService.s("ytdlp_err_command_failed"), "boom"))
     }
 }

@@ -36,6 +36,7 @@ final class DebugLogWindowManager: NSObject, NSWindowDelegate {
         window.title = LanguageService.shared.s("debug_logs")
         window.minSize = NSSize(width: 550, height: 350)
         window.contentViewController = hostingController
+        window.setFrameAutosaveName("SiphonDebugLogWindow")
         window.delegate = self
 
         let controller = NSWindowController(window: window)

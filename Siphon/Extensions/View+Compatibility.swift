@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import Observation
 #if os(macOS)
 import AppKit
 import SiphonCore
@@ -112,10 +113,11 @@ public struct RenderingCapabilities: Sendable, Equatable {
 }
 
 @MainActor
-public final class AdaptiveRenderingEnvironment: ObservableObject {
+@Observable
+public final class AdaptiveRenderingEnvironment {
     public static let shared = AdaptiveRenderingEnvironment()
 
-    @Published public private(set) var capabilities: RenderingCapabilities
+    public private(set) var capabilities: RenderingCapabilities
 
     public var reduceMotion: Bool {
         capabilities.reduceMotion
@@ -128,7 +130,7 @@ public final class AdaptiveRenderingEnvironment: ObservableObject {
     public var maxRefreshRate: Int {
         capabilities.maxRefreshRate
     }
-    @Published public var isAppActive: Bool = true
+    public var isAppActive: Bool = true
 
     public var shouldAnimateAmbient: Bool {
         isAppActive && !capabilities.reduceMotion
@@ -253,21 +255,14 @@ public enum SiphonAnimation {
 
 // MARK: - Per-window Rendering Capabilities
 
-private struct SiphonRenderingCapabilitiesKey: EnvironmentKey {
-    static let defaultValue = RenderingCapabilities(
+extension EnvironmentValues {
+    @Entry var siphonRenderingCapabilities = RenderingCapabilities(
         supportsEDR: false,
         supportsP3: false,
         reduceTransparency: false,
         reduceMotion: false,
         maxRefreshRate: 60
     )
-}
-
-extension EnvironmentValues {
-    var siphonRenderingCapabilities: RenderingCapabilities {
-        get { self[SiphonRenderingCapabilitiesKey.self] }
-        set { self[SiphonRenderingCapabilitiesKey.self] = newValue }
-    }
 }
 
 @MainActor
@@ -357,7 +352,8 @@ private struct SiphonAdaptiveRenderingModifier: ViewModifier {
 
 // MARK: - Reusable Managed Transient Feedback Pattern
 @MainActor
-public final class TransientFeedbackState: ObservableObject {
+@Observable
+public final class TransientFeedbackState {
     public struct Item: Equatable {
         public let id = UUID()
         public let message: String
@@ -371,11 +367,11 @@ public final class TransientFeedbackState: ObservableObject {
         }
     }
 
-    @Published public private(set) var current: Item?
-    private var dismissTask: Task<Void, Never>?
+    public private(set) var current: Item?
+    @ObservationIgnored private var dismissTask: Task<Void, Never>?
 
     public init() {
-        // Intentionally empty initializer for ObservableObject instantiation (swift:S1186)
+        // Intentionally empty initializer for public instantiation (swift:S1186)
     }
 
     public var isShowing: Bool { current != nil }

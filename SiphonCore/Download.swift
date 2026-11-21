@@ -422,7 +422,7 @@ public struct HistoricDownload: Codable, Identifiable, Sendable {
     }
     public let duration: String?
     public let errorMessage: String?
-    public let log: String
+    public internal(set) var log: String
     public let progress: Double
     public let scratchDirectoryPath: String?
     public let browserCookieSource: String?

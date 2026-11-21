@@ -131,7 +131,7 @@ No item is retired, so no follow-up issues are needed.
 
 ## String Catalogs (#621)
 
-**Not now.** `LanguageService` has one language and about 430 keys, with roughly 620 call sites. A shim that reads an `.xcstrings` catalogue behind `s(_:)` would avoid touching the call sites, but with one language it changes nothing a user can see, and the `selectedLanguage` setting and its observers would need rework.
+**Not now.** `LanguageService` has one language and about 430 keys, with roughly 620 call sites. A shim that reads an `.xcstrings` catalogue behind `s(_:)` would avoid touching the call sites, but with one language it changes nothing a user can see.
 
 Trigger to revisit: a second language is actually planned.
 

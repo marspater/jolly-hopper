@@ -4,10 +4,9 @@
 //
 
 import Foundation
-import Combine
 
 @preconcurrency @MainActor
-public final class DownloadQueue: ObservableObject {
+public final class DownloadQueue {
     public private(set) var reservedDownloadSlots: Set<UUID> = []
     public private(set) var reservedOutputPaths: Set<String> = []
     private let userDefaults: UserDefaults

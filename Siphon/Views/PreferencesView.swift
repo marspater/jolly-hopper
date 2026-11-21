@@ -34,8 +34,6 @@ struct PreferencesView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) private var colorScheme
-    @State private var showLanguageChangeAlert = false
-    @State private var previousLanguage: Language?
     @State private var installedBrowsers: [SupportedBrowser] = []
     @State private var customPresets: [CustomPreset] = []
     @State private var showCreatePresetSheet = false
@@ -149,12 +147,6 @@ struct PreferencesView: View {
                 selectedTab = tab
             }
         }
-        .onChange(of: languageService.selectedLanguage) { _, newValue in
-            if previousLanguage != nil && previousLanguage != newValue {
-                showLanguageChangeAlert = true
-            }
-            previousLanguage = newValue
-        }
         .onChange(of: theme) { _, newTheme in
             SiphonTheme.applyTheme(newTheme)
         }
@@ -169,7 +161,6 @@ struct PreferencesView: View {
         .onAppear {
             showUpdateRestartAlert = updateChecker.needsRestart
             SiphonTheme.applyTheme(theme)
-            previousLanguage = languageService.selectedLanguage
             customPresets = CustomPreset.loadAll(from: userDefaults)
             hasFullDiskAccess = YtdlpService.hasFullDiskAccess
             isLaunchAtLoginEnabled = LoginItemHelper.shared.isEnabled
@@ -208,13 +199,6 @@ struct PreferencesView: View {
             }
         } message: {
             Text(languageService.s("update_ready_message"))
-        }
-        .alert(languageService.s("language_changed_title"), isPresented: $showLanguageChangeAlert) {
-            Button(languageService.s("ok")) {
-                showLanguageChangeAlert = false
-            }
-        } message: {
-            Text(languageService.s("language_changed_message"))
         }
         .alert(languageService.s("clear_all_sites_confirm_title"), isPresented: $showClearAllSitesConfirmation) {
             Button(languageService.s("cancel"), role: .cancel) {

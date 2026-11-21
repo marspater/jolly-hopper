@@ -60,7 +60,7 @@ struct StatusSegmentFill: View {
     var isHovered: Bool = false
     var isActive: Bool = false
 
-    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
+    private let renderingEnvironment = AdaptiveRenderingEnvironment.shared
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// The wave clock stops while paused, so the edge freezes where it was and

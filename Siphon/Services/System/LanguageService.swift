@@ -1,21 +1,10 @@
-import SwiftUI
+import Foundation
 import SiphonCore
 import Combine
-
-enum Language: String, CaseIterable, Identifiable {
-    case english = "en"
-
-    var id: String { self.rawValue }
-
-    var displayName: String {
-        return "English"
-    }
-}
 
 @MainActor
 class LanguageService: ObservableObject {
     public static let shared = LanguageService()
-    @AppStorage("selectedLanguage", store: UITestLaunchMode.defaults) var selectedLanguage: Language = .english
 
     // Bolt Performance Optimization: Single-pass character replacement avoiding
     // preliminary scans, intermediate array allocations, and NSString bridging.
@@ -195,6 +184,86 @@ class LanguageService: ObservableObject {
         "update_available_message": "A new version of Siphon (v%@) is ready. Would you like to download it now?",
         "update_available_body": "Siphon v%@ is now available.",
         "update_check_failed_title": "Update Check Failed",
+        "ytdlp_err_twinkaboo_plays_this_video_through": "Twinkaboo plays this video through an encrypted player that Siphon doesn't support. The only other video on the page is the site's sponsored promo, so Siphon didn't download anything.",
+        "ytdlp_err_yt_dlp_returned_playlist_data": "yt-dlp returned playlist data Siphon couldn't read.",
+        "ytdlp_err_recu_me_recordings_can_t": "Recu.me recordings can't be trimmed yet. Clear the time range to download the full recording.",
+        "ytdlp_err_advanced_arguments_contain_an_unterminated": "Advanced arguments contain an unterminated quote. Close the quote and try again.",
+        "ytdlp_err_download_failed_across_all_recovery": "Download failed across all recovery strategies.",
+        "ytdlp_err_recu_me_refused_playback_for": "Recu.me refused playback for this account: its daily view limit is reached or the recording needs a membership.",
+        "ytdlp_err_recu_me_requires_a_confirmed": "Recu.me requires a confirmed email address for this account. Confirm it on recu.me, then retry.",
+        "ytdlp_err_recu_me_has_temporarily_restricted": "Recu.me has temporarily restricted playback of this recording.",
+        "ytdlp_err_recu_me_did_not_return": "Recu.me did not return a playable HLS stream for this recording.",
+        "ytdlp_err_recu_me_did_not_answer": "Recu.me did not answer the video request. Check the connection, then retry.",
+        "ytdlp_err_recu_me_verification_or_sign": "Recu.me verification or sign-in did not finish within 5 minutes.",
+        "ytdlp_err_recu_me_s_player_did": "Recu.me's player did not start. Retry in a moment.",
+        "ytdlp_err_recu_me_rejected_the_refreshed": "Recu.me rejected the refreshed video token. Retry in a moment.",
+        "ytdlp_err_unsupported_protected_site_url_expected": "Unsupported protected-site URL. Expected /<model>/video/<id>/play.",
+        "ytdlp_err_the_window_was_closed_so": "The %@ window was closed, so Siphon stopped the downloads waiting for it. Retry to open it again.",
+        "ytdlp_err_the_window_was_closed_before": "The %@ window was closed before a video started.",
+        "ytdlp_err_no_video_started_on_within": "No video started on %@ within 5 minutes.",
+        "ytdlp_err_unsupported_url": "Unsupported %@ URL.",
+        "ytdlp_err_the_protected_site_denied_access": "The protected site denied access (HTTP 403). This may be an anti-bot challenge or an access restriction; it does not prove your cookies are invalid.",
+        "ytdlp_err_invalid_stream_decryption_key": "Invalid stream decryption key",
+        "ytdlp_err_failed_to_initialize_stream_decryptor": "Failed to initialize stream decryptor",
+        "ytdlp_err_failed_to_create_temporary_file": "Failed to create temporary file for stream decryption with restricted permissions",
+        "ytdlp_err_failed_to_open_file_handles": "Failed to open file handles for stream decryption",
+        "ytdlp_err_stream_decryption_update_failed": "Stream decryption update failed",
+        "ytdlp_err_the_site_presented_an_anti": "The site presented an anti-bot challenge. Please ensure cookies are enabled in your browser or try again in a few moments.",
+        "ytdlp_err_this_video_is_unavailable_private": "This video is unavailable, private, or has been removed.",
+        "ytdlp_err_the_protected_site_denied_access_2": "The protected site denied access (HTTP 403). This may be an anti-bot challenge or an access restriction.",
+        "ytdlp_err_could_not_extract_a_media": "Could not extract a media stream from this protected-site URL. Please verify the link and try again.",
+        "ytdlp_err_could_not_resolve_this_protected": "Could not resolve this protected-site recording. Use a /<model>/video/<id>/play URL.",
+        "ytdlp_err_could_not_resolve_the_protected": "Could not resolve the protected-site player. Verify the video link and retry.",
+        "ytdlp_err_the_protected_site_denied_access_3": "The protected site denied access (HTTP 403). The page may require browser verification or have an access restriction.",
+        "ytdlp_err_could_not_resolve_this_starwank": "Could not resolve this Starwank video. Verify the video link and retry.",
+        "ytdlp_err_starwank_denied_access_http_the": "Starwank denied access (HTTP 403). The video may require browser verification or an active session.",
+        "ytdlp_err_could_not_resolve_this_pussyspace": "Could not resolve this PussySpace video. Verify the video link and retry.",
+        "ytdlp_err_pussyspace_denied_access_http_the": "PussySpace denied access (HTTP 403). The video may require browser verification or an active session.",
+        "ytdlp_err_youtube_requires_authentication_or_browser": "YouTube requires authentication or browser cookies. Go to Settings > Advanced > Login Source (Cookies) to select your browser.",
+        "ytdlp_err_s_players_didn_t_load": "%@'s players didn't load a video. It may have been removed from every player on the page.",
+        "ytdlp_err_none_of_the_videos_s": "None of the videos %@'s players loaded could be downloaded. Retry in a moment.",
+        "ytdlp_err_not_found": "yt-dlp not found. Download dependencies in Settings > Advanced.",
+        "ytdlp_err_parse": "Failed to parse data",
+        "ytdlp_err_command_failed": "Command failed: %@",
+        "ytdlp_err_download_failed": "Download failed",
+        "ytdlp_err_too_many_requests": "429: Too Many Requests",
+        "ytdlp_err_subtitle": "Subtitle error: %@",
+        "ytdlp_err_cloudflare": "Blocked by Cloudflare anti-bot protection. Siphon could not complete the browser challenge automatically.",
+        "ytdlp_err_ffmpeg_install": "FFmpeg installation failed. Please try updating dependencies again. Attempted path: %@",
+        "ytdlp_err_needs_browser_cookies": "This video site requires signed-in browser cookies. Open Settings > Advanced > Login Source (Cookies), choose your browser, then try again.",
+        "ytdlp_err_login_required": "BoyfriendTV shows this video only to signed-in members. Retry and sign in in the BoyfriendTV window that opens, with “Remember me” ticked.",
+        "ytdlp_err_security_violation": "Security violation: %@",
+        "update_err_invalid_url": "Invalid update download URL",
+        "update_err_download_cancelled": "Update download was cancelled",
+        "update_err_checksum_unavailable": "Could not verify update checksum: %@",
+        "update_err_download_failed": "Update download failed: %@",
+        "update_err_package_not_found": "Downloaded package not found at: %@",
+        "update_err_mount_failed": "Failed to mount disk image: %@",
+        "update_err_unmount_failed": "Failed to unmount disk image: %@",
+        "update_err_app_not_found": "No .app bundle found inside downloaded package",
+        "update_err_extraction_failed": "Failed to extract package: %@",
+        "update_err_staged_verification_failed": "Verification failed for staged app: %@",
+        "update_err_replacement_failed": "Failed to replace application bundle: %@",
+        "update_err_rollback_failed": "Rollback failed after installation error: %@",
+        "update_err_file_not_found": "File for verification does not exist at: %@",
+        "update_err_checksum_mismatch": "SHA-256 checksum mismatch. Expected: %@, calculated: %@",
+        "update_err_bundle_not_found": "Application bundle not found at: %@",
+        "update_err_bundle_id": "Invalid bundle identifier. Expected: %@, got: %@",
+        "update_err_code_signature": "Code signature check failed (OSStatus %ld): %@",
+        "update_err_team_id": "Developer Team ID mismatch. Expected: %@, found: %@",
+        "update_err_architecture": "App bundle does not support required architecture: %@",
+        "update_err_verification_failed": "Verification failed: %@",
+        "update_err_manifest_signature": "Release manifest signature verification failed",
+        "update_err_manifest_key": "Invalid Ed25519 public key",
+        "update_err_manifest_version": "Manifest version '%@' does not match release version '%@'",
+        "update_err_manifest_asset": "Asset '%@' not found in signed release manifest",
+        "update_err_manifest_checksum": "Checksum '%@' in manifest is not a valid 64-character SHA-256 hex string",
+        "update_err_manifest_missing": "Release manifest was not found",
+        "update_err_manifest_sig_missing": "Release manifest signature was not found",
+        "update_err_manifest_malformed": "Release manifest is malformed: %@",
+        "cookie_prepare_failed": "Siphon couldn't prepare the cookies for this site: %@",
+        "scratch_directory_failed": "Failed to initialize temporary scratch directory: %@",
+        "stream_decryption_io_failed": "Stream decryption could not read or write the file: %@",
         "app_up_to_date_title": "Siphon Is Up to Date",
         "app_up_to_date_message": "Version %@ is the latest version available.",
         "later": "Later",
@@ -261,8 +330,6 @@ class LanguageService: ObservableObject {
         "metadata_timed_out": "yt-dlp did not finish reading this page within 2 minutes, so Siphon stopped it. Try again, or check the link and your connection.",
         "clear_sites_failed": "Some site data could not be cleared. Close any open site windows and try again.",
         "update_ready_message": "Restart Siphon to finish updating.",
-        "language_changed_title": "Language Changed",
-        "language_changed_message": "Some text updates after Siphon restarts.",
         "stop_all": "Stop All",
         "retry": "Retry / Resume",
         "stop": "Stop",

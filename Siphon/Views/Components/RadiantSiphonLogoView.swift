@@ -8,7 +8,7 @@ import AppKit
 
 struct RadiantSiphonLogoView: View {
     @State private var isHovered: Bool = false
-    @ObservedObject private var renderingEnvironment = AdaptiveRenderingEnvironment.shared
+    private let renderingEnvironment = AdaptiveRenderingEnvironment.shared
     @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
 
     var body: some View {

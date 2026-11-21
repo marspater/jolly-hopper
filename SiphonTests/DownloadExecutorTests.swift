@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Testing
 @testable import Siphon
 @testable import SiphonCore
 
@@ -954,5 +955,29 @@ final class DownloadExecutorTests: XCTestCase {
         // Stopping this download must not crash or output ___FETCHING___
         executor.stopDownload(download, queue: DownloadQueue(), suppressNotification: false)
         XCTAssertEqual(download.status, .stopped)
+    }
+}
+
+@MainActor
+@Suite("Download activity assertion")
+struct DownloadActivityAssertionTests {
+    @Test func assertionIsHeldUntilEndedAndEndingIsIdempotent() {
+        let executor = DownloadExecutor(ytdlpService: YtdlpService(processRunner: MockYtdlpProcessRunner()))
+        let id = UUID()
+        #expect(!executor.hasActivityAssertion(for: id))
+        executor.beginActivityAssertion(for: id)
+        executor.beginActivityAssertion(for: id)
+        #expect(executor.hasActivityAssertion(for: id))
+        executor.endActivityAssertion(for: id)
+        executor.endActivityAssertion(for: id)
+        #expect(!executor.hasActivityAssertion(for: id))
+    }
+
+    @Test func assertionIsReleasedWhenAnAttemptEndsWithoutRunning() async {
+        let executor = DownloadExecutor(ytdlpService: YtdlpService(processRunner: MockYtdlpProcessRunner()))
+        let download = Download(url: "https://example.com/v", options: .default, title: "t")
+        download.status = .completed
+        await executor.executeDownload(download, queue: DownloadQueue(), ytdlpVersion: nil, languageService: nil)
+        #expect(!executor.hasActivityAssertion(for: download.id))
     }
 }

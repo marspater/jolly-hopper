@@ -59,9 +59,30 @@ public final class DownloadHistoryStore {
         }
     }
 
+    /// CFPreferences refuses values of 4 MiB and larger, which silently loses the
+    /// whole history. Stay below it.
+    static let maxEncodedHistoryBytes = 3_500_000
+
     public func saveHistory(_ history: [HistoricDownload]) {
         do {
-            let encoded = try JSONEncoder().encode(history)
+            var encoded = try JSONEncoder().encode(history)
+            if encoded.count > Self.maxEncodedHistoryBytes {
+                // Drop logs from the oldest finished entries until it fits. Paused and
+                // file-exists entries are live work and keep theirs.
+                var trimmed = history
+                // Re-encoding every 50 entries keeps this linear in the history size.
+                var stripped = 0
+                for index in trimmed.indices where trimmed[index].status != .paused && trimmed[index].status != .fileExists {
+                    trimmed[index].log = ""
+                    stripped += 1
+                    if stripped % 50 == 0 {
+                        encoded = try JSONEncoder().encode(trimmed)
+                        if encoded.count <= Self.maxEncodedHistoryBytes { break }
+                    }
+                }
+                if encoded.count > Self.maxEncodedHistoryBytes { encoded = try JSONEncoder().encode(trimmed) }
+                log("Download history exceeded the preferences size limit; trimmed old logs.", .warning)
+            }
             userDefaults.set(encoded, forKey: historyKey)
         } catch {
             log("Failed to encode download history: \(error.localizedDescription)", .error)

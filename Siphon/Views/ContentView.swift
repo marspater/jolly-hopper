@@ -46,7 +46,7 @@ struct ContentView: View {
             set: { if !$0 { appState.ytdlpUpdateMessage = nil } }
         )
     }
-    @AppStorage("showMenuBarIcon") private var showMenuBarIcon: Bool = true
+    @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon: Bool = true
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
 
     /// The What's New sheet's dismissal handler: runs once the sheet is gone,
@@ -112,9 +112,6 @@ struct ContentView: View {
                     }
                 }
 
-                .onChange(of: languageService.selectedLanguage) { _, _ in
-                    MenuBarManager.shared.updateMenu()
-                }
                 .onChange(of: theme) { _, _ in
                     MenuBarManager.shared.updateMenu()
                 }

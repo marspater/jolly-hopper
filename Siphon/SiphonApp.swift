@@ -67,6 +67,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 }
 
+/// A parsed `siphon://` link. Carries only the browser identifier and user agent,
+/// never cookies or other credentials.
+enum DeepLinkRoute: Equatable {
+    case download(url: String?, isFastDownload: Bool, userAgent: String?, browserSource: String?)
+    /// Any other host: bring the app forward and do nothing else.
+    case other
+
+    init(_ url: URL) {
+        let host = url.host?.lowercased()
+        guard host == "download" || host == "fast-download" else {
+            self = .other
+            return
+        }
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
+        func value(_ name: String) -> String? { items?.first(where: { $0.name == name })?.value }
+        self = .download(
+            url: value("url"),
+            isFastDownload: host == "fast-download",
+            userAgent: value("ua"),
+            browserSource: value("browser")
+        )
+    }
+}
+
 @main
 struct SiphonApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
@@ -187,28 +211,25 @@ struct SiphonApp: App {
         NSApp.setActivationPolicy(.regular)
         NSApp.bringToFront()
 
-        guard url.host == "download" || url.host == "fast-download" else {
+        switch DeepLinkRoute(url) {
+        case .other:
             bringMainWindowsForward()
-            return
+        case let .download(videoUrl, isFastDownload, rawUserAgent, rawBrowserSource):
+            // Fast downloads each start their own job; interactive links share one sheet.
+            // Taken before validation: even an invalid new link supersedes a pending one.
+            let generation = isFastDownload ? nil : appState.beginInteractiveLink()
+            guard let target = Self.externalDownloadTarget(from: videoUrl) else {
+                rejectExternalTarget(videoUrl)
+                return
+            }
+            admitExternalDownload(
+                target,
+                generation: generation,
+                isFastDownload: isFastDownload,
+                rawUserAgent: rawUserAgent,
+                rawBrowserSource: rawBrowserSource
+            )
         }
-
-        let queryItems = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems
-        let videoUrl = queryItems?.first(where: { $0.name == "url" })?.value
-        let isFastDownload = url.host == "fast-download"
-        // Fast downloads each start their own job; interactive links share one sheet.
-        // Taken before validation: even an invalid new link supersedes a pending one.
-        let generation = isFastDownload ? nil : appState.beginInteractiveLink()
-        guard let target = Self.externalDownloadTarget(from: videoUrl) else {
-            rejectExternalTarget(videoUrl)
-            return
-        }
-        admitExternalDownload(
-            target,
-            generation: generation,
-            isFastDownload: isFastDownload,
-            rawUserAgent: queryItems?.first(where: { $0.name == "ua" })?.value,
-            rawBrowserSource: queryItems?.first(where: { $0.name == "browser" })?.value
-        )
     }
 
     private func bringMainWindowsForward() {

@@ -172,6 +172,32 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertEqual(EgressBoundary.$proxyURL.withValue(route) { EgressBoundary.webKitProxyConfigurations.count }, 1)
     }
 
+    func testBoundedDataStopsReadingAfterItsDeadline() async throws {
+        let server = MockHTTPServer()
+        let serverPort = try server.start { _ in (200, [:], Data(repeating: 0x61, count: 64 * 1024)) }
+        defer { server.stop() }
+        let request = URLRequest(url: URL(string: "http://127.0.0.1:\(serverPort)/")!)
+
+        do {
+            _ = try await URLSession.shared.boundedData(for: request, deadline: .zero)
+            XCTFail("A body that outlasts the deadline must not be returned")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .timedOut)
+        }
+        let (data, _) = try await URLSession.shared.boundedData(for: request)
+        XCTAssertEqual(data.count, 64 * 1024)
+
+        let small = MockHTTPServer()
+        let smallPort = try small.start { _ in (200, [:], Data(repeating: 0x61, count: 100)) }
+        defer { small.stop() }
+        do {
+            _ = try await URLSession.shared.boundedData(for: URLRequest(url: URL(string: "http://127.0.0.1:\(smallPort)/")!), deadline: .zero)
+            XCTFail("A small body must also respect the deadline")
+        } catch let error as URLError {
+            XCTAssertEqual(error.code, .timedOut)
+        }
+    }
+
     func testProxyBlocksDirectLoopbackConnection() async throws {
         let proxy = EgressProxyServer()
         let proxyPort = try await proxy.start()

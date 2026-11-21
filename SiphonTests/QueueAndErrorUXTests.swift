@@ -130,7 +130,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         }
 
         let lang = MockLanguageService()
-        lang.selectedLanguage = .english
 
         var options = DownloadOptions.default
         options.fileType = .mp4

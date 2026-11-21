@@ -126,7 +126,7 @@ struct DownloadRowView: View {
     @State private var recoveredArguments = ""
     @FocusState private var isRecoveredArgumentsFocused: Bool
     @State private var showDiagnostics = false
-    @StateObject private var errorCopyFeedback = TransientFeedbackState()
+    @State private var errorCopyFeedback = TransientFeedbackState()
     @State private var showRawError = false
     /// nil until checked; unknown counts as present so actions don't flicker.
     @State private var primaryFileIsPresent: Bool?
@@ -1326,7 +1326,7 @@ struct DownloadLogSheet: View {
     @ObservedObject var download: Download
     @EnvironmentObject var languageService: LanguageService
     @Environment(\.dismiss) private var dismiss
-    @StateObject private var logCopyFeedback = TransientFeedbackState()
+    @State private var logCopyFeedback = TransientFeedbackState()
 
     private var logEntryCountText: String {
         let count = download.log.split(whereSeparator: \.isNewline).count

@@ -6,7 +6,7 @@ struct DebugLogView: View {
     @ObservedObject private var logger: LoggerService
     @ObservedObject private var languageService: LanguageService
     @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
-    @StateObject private var copyFeedback = TransientFeedbackState()
+    @State private var copyFeedback = TransientFeedbackState()
     @State private var isExporting = false
 
     init(logger: LoggerService = .shared, languageService: LanguageService = .shared) {

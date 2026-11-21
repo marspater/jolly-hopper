@@ -20,21 +20,21 @@ public enum UpdateInstallError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .packageNotFound(let url):
-            return "Downloaded package not found at: \(url.path)"
+            return String(format: LanguageService.s("update_err_package_not_found"), url.path)
         case .mountFailed(let msg):
-            return "Failed to mount disk image: \(msg)"
+            return String(format: LanguageService.s("update_err_mount_failed"), msg)
         case .unmountFailed(let msg):
-            return "Failed to unmount disk image: \(msg)"
+            return String(format: LanguageService.s("update_err_unmount_failed"), msg)
         case .appNotFoundInPackage:
-            return "No .app bundle found inside downloaded package"
+            return LanguageService.s("update_err_app_not_found")
         case .extractionFailed(let msg):
-            return "Failed to extract package: \(msg)"
+            return String(format: LanguageService.s("update_err_extraction_failed"), msg)
         case .verificationFailed(let msg):
-            return "Verification failed for staged app: \(msg)"
+            return String(format: LanguageService.s("update_err_staged_verification_failed"), msg)
         case .replacementFailed(let msg):
-            return "Failed to replace application bundle: \(msg)"
+            return String(format: LanguageService.s("update_err_replacement_failed"), msg)
         case .rollbackFailed(let msg):
-            return "Rollback failed after installation error: \(msg)"
+            return String(format: LanguageService.s("update_err_rollback_failed"), msg)
         }
     }
 }

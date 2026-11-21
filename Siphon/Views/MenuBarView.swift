@@ -19,7 +19,7 @@ struct MenuBarView: View {
     @AppStorage("customPresets") private var customPresetsData: Data = Data()
 
     @State private var customPresets: [CustomPreset] = []
-    @StateObject private var pasteFeedback = TransientFeedbackState()
+    @State private var pasteFeedback = TransientFeedbackState()
     @State private var isShowMainWindowHovered = false
     @State private var isQuitHovered = false
 

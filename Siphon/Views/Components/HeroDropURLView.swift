@@ -21,7 +21,7 @@ extension HeroDropURLView {
         if let invalidMessage {
             let state = TransientFeedbackState()
             state.show(invalidMessage, isSuccess: false, icon: "exclamationmark.circle.fill", duration: 3600)
-            _feedback = StateObject(wrappedValue: state)
+            _feedback = State(initialValue: state)
         }
     }
 }
@@ -55,8 +55,8 @@ struct HeroDropURLView: View {
     @FocusState private var isFieldFocused: Bool
     @State private var inputURL: String = ""
     @State private var isTargeted: Bool = false
-    @StateObject private var feedback = TransientFeedbackState()
-    @StateObject private var pasteFeedback = TransientFeedbackState()
+    @State private var feedback = TransientFeedbackState()
+    @State private var pasteFeedback = TransientFeedbackState()
 
     private var showsFieldFocus: Bool {
         isFieldFocused && appearsActive && !appState.showAddDownloadSheet

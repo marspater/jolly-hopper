@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Testing
 @testable import SiphonCore
 
 @MainActor
@@ -274,5 +275,30 @@ final class DownloadHistoryStoreTests: XCTestCase {
         collided.scratchDirectory = scratch
         XCTAssertEqual(HistoricDownload(download: collided).scratchDirectoryPath, scratch.path,
                        "Overwrite or New Name resumes the paused attempt's partial data")
+    }
+}
+
+@MainActor
+@Suite struct DownloadHistorySizeLimitTests {
+    @Test func oversizedHistoryTrimsOldLogsBelowPreferencesLimit() throws {
+        let suiteName = "test.history.size.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let key = "test_history_oversized"
+        let store = DownloadHistoryStore(userDefaults: defaults, historyKey: key)
+        var history: [HistoricDownload] = []
+        for i in 0..<500 {
+            let dl = Download(url: "https://example.com/video/\(i)", options: .default, title: "Video \(i)")
+            dl.status = i == 0 ? .paused : .completed
+            dl.log = String(repeating: "x", count: 9_000)
+            store.addToHistory(dl, history: &history, skipSave: true)
+        }
+        store.saveHistory(history)
+
+        let data = try #require(defaults.data(forKey: key))
+        #expect(data.count < 4_194_304)
+        let loaded = store.loadHistory()
+        #expect(loaded.count == 500)
+        #expect(try #require(loaded.first { $0.status == .paused }).log.isEmpty == false)
     }
 }

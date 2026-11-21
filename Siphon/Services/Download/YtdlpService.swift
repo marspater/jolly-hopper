@@ -1056,7 +1056,7 @@ class YtdlpService: ObservableObject {
         if info.fetchedAt == nil { info.fetchedAt = Date() }
         if let json = info.rawJSON, Self.isTwinkabooPromo(pageURL: normalizedURL, infoJSON: json) {
             LoggerService.shared.log("[ProtectedSite] twinkaboo returned only its sponsored promo; not saving it as the video", level: .warning)
-            throw YtdlpError.downloadFailed("Twinkaboo plays this video through an encrypted player that Siphon doesn't support. The only other video on the page is the site's sponsored promo, so Siphon didn't download anything.")
+            throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_twinkaboo_plays_this_video_through"))
         }
         return info
     }
@@ -1790,7 +1790,7 @@ class YtdlpService: ObservableObject {
                 level: .warning
             )
             if results.isEmpty {
-                throw YtdlpError.downloadFailed("yt-dlp returned playlist data Siphon couldn't read.")
+                throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_yt_dlp_returned_playlist_data"))
             }
         }
 
@@ -1819,7 +1819,7 @@ class YtdlpService: ObservableObject {
             return try SecureCookieFile.create(url: url, rawCookies: rawCookies, additionalCookies: additionalCookies)
         } catch {
             LoggerService.shared.log("Could not prepare session cookies for \(hostForLog(url)): \(error.localizedDescription)", level: .error)
-            throw YtdlpError.downloadFailed("Siphon couldn't prepare the cookies for this site: \(error.localizedDescription)")
+            throw YtdlpError.downloadFailed(key: "cookie_prepare_failed", cause: error)
         }
     }
 
@@ -1985,7 +1985,7 @@ public struct DownloadResult: Sendable {
             // parameter below, so every segment would fail with 422.
             if let start = options.timeFrameStart, let end = options.timeFrameEnd,
                Self.isValidTimeFrame(start), Self.isValidTimeFrame(end) {
-                throw YtdlpError.downloadFailed("Recu.me recordings can't be trimmed yet. Clear the time range to download the full recording.")
+                throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_recu_me_recordings_can_t"))
             }
             // Recu signs the playlist for the user-agent of the session that resolved
             // it (any other agent gets 404), so resolve fresh and download with it.
@@ -2173,7 +2173,7 @@ public struct DownloadResult: Sendable {
             ScratchDirectoryPolicy.markOwner(scratchDirectory)
         } catch {
             LoggerService.shared.log("Failed to create temporary scratch directory at \(scratchDirectory.path): \(error.localizedDescription)", level: .error)
-            throw YtdlpError.downloadFailed("Failed to initialize temporary scratch directory: \(error.localizedDescription)")
+            throw YtdlpError.downloadFailed(key: "scratch_directory_failed", cause: error)
         }
         // Registered before any later throw (argument parsing, cookie files) so none leaks it.
         defer {
@@ -2297,7 +2297,7 @@ public struct DownloadResult: Sendable {
         if let extra = options.additionalArguments?.trimmingCharacters(in: .whitespacesAndNewlines), !extra.isEmpty {
             let parsed = Self.parseArgumentStringChecked(extra)
             if parsed.isUnterminated {
-                throw YtdlpError.downloadFailed("Advanced arguments contain an unterminated quote. Close the quote and try again.")
+                throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_advanced_arguments_contain_an_unterminated"))
             }
             var extraArgs = Self.removingOutputLocationArguments(parsed.args)
             if options.enforcePublicNetworkBoundary {
@@ -2687,7 +2687,7 @@ public struct DownloadResult: Sendable {
         }
 
         guard let finalResult = processResult else {
-            throw YtdlpError.downloadFailed("Download failed across all recovery strategies.")
+            throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_download_failed_across_all_recovery"))
         }
         if let partialFailure = finalResult.partialFailure {
             onOutput("[WARNING] \(finalResult.allPaths.count) item(s) finished; others failed: \(partialFailure)\n")
@@ -3637,16 +3637,16 @@ public struct DownloadResult: Sendable {
         case "wrong_token":
             return .staleToken
         case "shall_subscribe":
-            return .denied("Recu.me refused playback for this account: its daily view limit is reached or the recording needs a membership.")
+            return .denied(LanguageService.s("ytdlp_err_recu_me_refused_playback_for"))
         case "shall_confirm_email":
-            return .denied("Recu.me requires a confirmed email address for this account. Confirm it on recu.me, then retry.")
+            return .denied(LanguageService.s("ytdlp_err_recu_me_requires_a_confirmed"))
         case "views_restricted":
-            return .denied("Recu.me has temporarily restricted playback of this recording.")
+            return .denied(LanguageService.s("ytdlp_err_recu_me_has_temporarily_restricted"))
         default:
             if let playlistURL = recuPlaylistURL(from: response) {
                 return .stream(playlistURL)
             }
-            return .denied("Recu.me did not return a playable HLS stream for this recording.")
+            return .denied(LanguageService.s("ytdlp_err_recu_me_did_not_return"))
         }
     }
 
@@ -3828,7 +3828,7 @@ public struct DownloadResult: Sendable {
         try Task.checkCancellation()
         guard let response else {
             LoggerService.shared.log("[ProtectedSite] stage=api result=request-failed", level: .debug)
-            throw YtdlpError.downloadFailed("Recu.me did not answer the video request. Check the connection, then retry.")
+            throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_recu_me_did_not_answer"))
         }
         return response
     }
@@ -3911,7 +3911,7 @@ public struct DownloadResult: Sendable {
                     try presentWindow(reason: "page-timeout")
                     continue
                 }
-                throw YtdlpError.downloadFailed("Recu.me verification or sign-in did not finish within 5 minutes.")
+                throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_recu_me_verification_or_sign"))
             }
 
             guard let state = await recuPageState(webView, videoID: videoID) else { continue }
@@ -3970,7 +3970,7 @@ public struct DownloadResult: Sendable {
                     }
                     try Task.checkCancellation()
                     guard let clicked else {
-                        throw YtdlpError.downloadFailed("Recu.me's player did not start. Retry in a moment.")
+                        throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_recu_me_s_player_did"))
                     }
                     // A button gone since the state check may mean the player already
                     // started; polling continues and the page deadline still applies.
@@ -4004,7 +4004,7 @@ public struct DownloadResult: Sendable {
                 }
             case .staleToken:
                 guard !reloadedStaleToken else {
-                    throw YtdlpError.downloadFailed("Recu.me rejected the refreshed video token. Retry in a moment.")
+                    throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_recu_me_rejected_the_refreshed"))
                 }
                 reloadedStaleToken = true
                 LoggerService.shared.log("[ProtectedSite] stage=api result=stale-token; reloading once", level: .info)
@@ -4025,7 +4025,7 @@ public struct DownloadResult: Sendable {
     private func resolveRecuMediaInfo(url: String, reuseRecent: Bool = true) async throws -> RecuExtractedMedia {
         guard let identity = Self.recuVideoIdentity(from: url),
               let pageURL = URL(string: "https://recu.me/\(identity.model)/video/\(identity.videoID)/play") else {
-            throw YtdlpError.downloadFailed("Unsupported protected-site URL. Expected /<model>/video/<id>/play.")
+            throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_unsupported_protected_site_url_expected"))
         }
         if let recent = recentRecuMedia.removeValue(forKey: identity.videoID), reuseRecent,
            Date().timeIntervalSince(recent.resolvedAt) < Self.recuMediaReuseInterval {
@@ -4275,7 +4275,7 @@ public struct DownloadResult: Sendable {
         func presentWindow(reason: String) throws {
             guard window == nil else { return }
             guard mayOpenSessionWindow(for: siteHost, requestedAt: requestedAt) else {
-                throw YtdlpError.downloadFailed("The \(siteHost) window was closed, so Siphon stopped the downloads waiting for it. Retry to open it again.")
+                throw YtdlpError.downloadFailed(String(format: LanguageService.s("ytdlp_err_the_window_was_closed_so"), siteHost))
             }
             LoggerService.shared.log("[ProtectedSite] stage=capture-webkit result=\(reason); waiting for the user", level: .info)
             window = presentBrowserSessionWindow(
@@ -4293,7 +4293,7 @@ public struct DownloadResult: Sendable {
 
             if windowDelegate.didClose {
                 recordSessionWindowClosed(for: siteHost)
-                throw YtdlpError.downloadFailed("The \(siteHost) window was closed before a video started.")
+                throw YtdlpError.downloadFailed(String(format: LanguageService.s("ytdlp_err_the_window_was_closed_before"), siteHost))
             }
             // Players start within a moment of each other; keep the order they started in.
             if !messageHandler.streams.isEmpty {
@@ -4304,7 +4304,7 @@ public struct DownloadResult: Sendable {
             }
             if Date() > deadline {
                 guard window == nil else {
-                    throw YtdlpError.downloadFailed("No video started on \(siteHost) within 5 minutes.")
+                    throw YtdlpError.downloadFailed(String(format: LanguageService.s("ytdlp_err_no_video_started_on_within"), siteHost))
                 }
                 try presentWindow(reason: "no-stream")
                 continue
@@ -4327,7 +4327,7 @@ public struct DownloadResult: Sendable {
         url: String, site: PlayerCaptureSite, path: String, proxy: String?
     ) async throws -> MediaInfo {
         guard let pageURL = URL(string: url) else {
-            throw YtdlpError.downloadFailed("Unsupported \(site.name) URL.")
+            throw YtdlpError.downloadFailed(String(format: LanguageService.s("ytdlp_err_unsupported_url"), site.name))
         }
         let capture: BrowserCapture
         if let loader = browserCaptureLoader {
@@ -4394,8 +4394,8 @@ public struct DownloadResult: Sendable {
             return info
         }
         throw YtdlpError.downloadFailed(capture.streams.isEmpty
-            ? "\(site.name)'s players didn't load a video. It may have been removed from every player on the page."
-            : "None of the videos \(site.name)'s players loaded could be downloaded. Retry in a moment.")
+            ? String(format: LanguageService.s("ytdlp_err_s_players_didn_t_load"), site.name)
+            : String(format: LanguageService.s("ytdlp_err_none_of_the_videos_s"), site.name))
     }
 
     private func isGayPornTubeURL(_ urlOrHost: String) -> Bool {
@@ -5480,7 +5480,7 @@ public struct DownloadResult: Sendable {
             throw YtdlpError.protectedSiteLoginRequired
         }
         if sawForbidden {
-            throw YtdlpError.downloadFailed("The protected site denied access (HTTP 403). This may be an anti-bot challenge or an access restriction; it does not prove your cookies are invalid.")
+            throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_the_protected_site_denied_access"))
         }
         LoggerService.shared.log("[ProtectedSite] stage=stream-resolution result=exhausted; falling back to yt-dlp", level: .warning)
         return nil
@@ -5956,7 +5956,7 @@ public struct DownloadResult: Sendable {
         }
 
         guard let videoID = Self.extractBeegVideoID(from: url) else {
-            LoggerService.shared.log("Beeg: unable to extract numeric video ID from \(url)", level: .warning)
+            LoggerService.shared.log("Beeg: unable to extract numeric video ID from \(hostForLog(url))", level: .warning)
             return nil
         }
 
@@ -6374,81 +6374,10 @@ public struct DownloadResult: Sendable {
         let allSources: [BestCamSource]
     }
 
-    private enum BestCamStreamCipher {
-        // Derives AES-256-CTR key hex via RFC 1321 MD5 required by BestCam/Abyss CDN protocol
+    enum BestCamStreamCipher {
+        // The CDN derives the AES-256-CTR key from the MD5 hex of the file name.
         static func deriveKeyHex(from string: String) -> String {
-            let data = Data(string.utf8)
-            var padded = [UInt8](data)
-            let bitLen = UInt64(data.count) * 8
-            padded.append(0x80)
-            while padded.count % 64 != 56 {
-                padded.append(0)
-            }
-            withUnsafeBytes(of: bitLen.littleEndian) { padded.append(contentsOf: $0) }
-
-            var a: UInt32 = 0x67452301
-            var b: UInt32 = 0xefcdab89
-            var c: UInt32 = 0x98badcfe
-            var d: UInt32 = 0x10325476
-
-            let s: [UInt32] = [
-                7, 12, 17, 22,  7, 12, 17, 22,  7, 12, 17, 22,  7, 12, 17, 22,
-                5,  9, 14, 20,  5,  9, 14, 20,  5,  9, 14, 20,  5,  9, 14, 20,
-                4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,  4, 11, 16, 23,
-                6, 10, 15, 21,  6, 10, 15, 21,  6, 10, 15, 21,  6, 10, 15, 21
-            ]
-
-            let k: [UInt32] = [
-                0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee,
-                0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
-                0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be,
-                0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821,
-                0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa,
-                0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8,
-                0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed,
-                0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a,
-                0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c,
-                0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70,
-                0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05,
-                0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665,
-                0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039,
-                0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1,
-                0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1,
-                0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391
-            ]
-
-            for chunkStart in stride(from: 0, to: padded.count, by: 64) {
-                var m = [UInt32](repeating: 0, count: 16)
-                for i in 0..<16 {
-                    let o = chunkStart + i * 4
-                    m[i] = UInt32(padded[o]) | (UInt32(padded[o + 1]) << 8) | (UInt32(padded[o + 2]) << 16) | (UInt32(padded[o + 3]) << 24)
-                }
-                var aa = a
-                var bb = b
-                var cc = c
-                var dd = d
-                for i in 0..<64 {
-                    var f: UInt32 = 0
-                    var g = 0
-                    if i < 16 { f = (bb & cc) | ((~bb) & dd); g = i }
-                    else if i < 32 { f = (dd & bb) | ((~dd) & cc); g = (5 * i + 1) % 16 }
-                    else if i < 48 { f = bb ^ cc ^ dd; g = (3 * i + 5) % 16 }
-                    else { f = cc ^ (bb | (~dd)); g = (7 * i) % 16 }
-                    let temp = dd; dd = cc; cc = bb
-                    let sum = aa &+ f &+ k[i] &+ m[g]
-                    bb = bb &+ ((sum << s[i]) | (sum >> (32 - s[i])))
-                    aa = temp
-                }
-                a = a &+ aa; b = b &+ bb; c = c &+ cc; d = d &+ dd
-            }
-
-            var res = [UInt8]()
-            res.reserveCapacity(16)
-            withUnsafeBytes(of: a.littleEndian) { res.append(contentsOf: $0) }
-            withUnsafeBytes(of: b.littleEndian) { res.append(contentsOf: $0) }
-            withUnsafeBytes(of: c.littleEndian) { res.append(contentsOf: $0) }
-            withUnsafeBytes(of: d.littleEndian) { res.append(contentsOf: $0) }
-            return res.map { String(format: "%02x", $0) }.joined()
+            Insecure.MD5.hash(data: Data(string.utf8)).map { String(format: "%02x", $0) }.joined()
         }
     }
 
@@ -6518,7 +6447,7 @@ public struct DownloadResult: Sendable {
         if header.count >= 8, header[4..<8] == Data("ftyp".utf8) { return }
         let keyHex = BestCamStreamCipher.deriveKeyHex(from: filename)
         guard let keyData = keyHex.data(using: .ascii), keyData.count == 32 else {
-            throw YtdlpError.downloadFailed("Invalid stream decryption key")
+            throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_invalid_stream_decryption_key"))
         }
         let ivData = keyData.prefix(16)
 
@@ -6539,13 +6468,13 @@ public struct DownloadResult: Sendable {
             }
         }
         guard createStatus == kCCSuccess, let ref = cryptor else {
-            throw YtdlpError.downloadFailed("Failed to initialize stream decryptor")
+            throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_failed_to_initialize_stream_decryptor"))
         }
         defer { CCCryptorRelease(ref) }
 
         let tempOutputURL = ScratchDirectoryPolicy.siblingTempURL(beside: fileURL, extension: fileURL.pathExtension)
         guard FileManager.default.createFile(atPath: tempOutputURL.path, contents: nil, attributes: [.posixPermissions: 0o600]) else {
-            throw YtdlpError.downloadFailed("Failed to create temporary file for stream decryption with restricted permissions")
+            throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_failed_to_create_temporary_file"))
         }
         var replaced = false
         defer {
@@ -6553,7 +6482,7 @@ public struct DownloadResult: Sendable {
         }
         guard let readHandle = try? FileHandle(forReadingFrom: fileURL),
               let writeHandle = try? FileHandle(forWritingTo: tempOutputURL) else {
-            throw YtdlpError.downloadFailed("Failed to open file handles for stream decryption")
+            throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_failed_to_open_file_handles"))
         }
         defer {
             try? readHandle.close()
@@ -6570,7 +6499,7 @@ public struct DownloadResult: Sendable {
                 hasMoreData = try autoreleasepool {
                     guard let chunk = try readHandle.read(upToCount: chunkSize), !chunk.isEmpty else { return false }
                     guard let decrypted = cryptorUpdate(ref, chunk, into: &buffer) else {
-                        throw YtdlpError.downloadFailed("Stream decryption update failed")
+                        throw YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_stream_decryption_update_failed"))
                     }
                     try writeHandle.write(contentsOf: decrypted)
                     return true
@@ -6581,7 +6510,7 @@ public struct DownloadResult: Sendable {
         } catch let error as YtdlpError {
             throw error
         } catch {
-            throw YtdlpError.downloadFailed("Stream decryption could not read or write the file: \(error.localizedDescription)")
+            throw YtdlpError.downloadFailed(key: "stream_decryption_io_failed", cause: error)
         }
 
         try? readHandle.close()
@@ -7675,7 +7604,7 @@ public struct DownloadResult: Sendable {
         }
 
         if Self.isPhantomJSError(errString) {
-            return YtdlpError.downloadFailed("The site presented an anti-bot challenge. Please ensure cookies are enabled in your browser or try again in a few moments.")
+            return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_the_site_presented_an_anti"))
         }
 
         if isBoyfriendTVURL(url) {
@@ -7690,7 +7619,7 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.cloudflareBlocked
             }
             if Self.isVideoUnavailableError(lowerErr) {
-                return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_this_video_is_unavailable_private"))
             }
             if lowerErr.containsAny(Self.loginRequiredErrorKeywords) {
                 if configuredBrowser == nil {
@@ -7700,10 +7629,10 @@ public struct DownloadResult: Sendable {
                 }
             }
             if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
-                return YtdlpError.downloadFailed("The protected site denied access (HTTP 403). This may be an anti-bot challenge or an access restriction.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_the_protected_site_denied_access_2"))
             }
             if lowerErr.contains("unsupported url") {
-                return YtdlpError.downloadFailed("Could not extract a media stream from this protected-site URL. Please verify the link and try again.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_could_not_extract_a_media"))
             }
             return error
         }
@@ -7720,7 +7649,7 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.cloudflareBlocked
             }
             if lowerErr.contains("unsupported url") {
-                return YtdlpError.downloadFailed("Could not resolve this protected-site recording. Use a /<model>/video/<id>/play URL.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_could_not_resolve_this_protected"))
             }
         }
 
@@ -7729,10 +7658,10 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.cloudflareBlocked
             }
             if lowerErr.contains("unsupported url") {
-                return YtdlpError.downloadFailed("Could not resolve the protected-site player. Verify the video link and retry.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_could_not_resolve_the_protected"))
             }
             if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
-                return YtdlpError.downloadFailed("The protected site denied access (HTTP 403). The page may require browser verification or have an access restriction.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_the_protected_site_denied_access_3"))
             }
         }
 
@@ -7741,7 +7670,7 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.cloudflareBlocked
             }
             if Self.isVideoUnavailableError(lowerErr) {
-                return YtdlpError.downloadFailed("This video is unavailable, private, or has been removed.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_this_video_is_unavailable_private"))
             }
             if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
                 return YtdlpError.cloudflareBlocked
@@ -7754,10 +7683,10 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.cloudflareBlocked
             }
             if lowerErr.contains("unsupported url") {
-                return YtdlpError.downloadFailed("Could not resolve this Starwank video. Verify the video link and retry.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_could_not_resolve_this_starwank"))
             }
             if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
-                return YtdlpError.downloadFailed("Starwank denied access (HTTP 403). The video may require browser verification or an active session.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_starwank_denied_access_http_the"))
             }
         }
 
@@ -7766,10 +7695,10 @@ public struct DownloadResult: Sendable {
                 return YtdlpError.cloudflareBlocked
             }
             if lowerErr.contains("unsupported url") {
-                return YtdlpError.downloadFailed("Could not resolve this PussySpace video. Verify the video link and retry.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_could_not_resolve_this_pussyspace"))
             }
             if lowerErr.containsAny(Self.accessDeniedErrorKeywords) {
-                return YtdlpError.downloadFailed("PussySpace denied access (HTTP 403). The video may require browser verification or an active session.")
+                return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_pussyspace_denied_access_http_the"))
             }
         }
 
@@ -7778,7 +7707,7 @@ public struct DownloadResult: Sendable {
         if isYouTube,
            lowerErr.containsAny(["403", "sign in", "login_required"]) || DefaultYtdlpProcessRunner.mentionsBot(errString),
            configuredBrowser == nil {
-            return YtdlpError.downloadFailed("YouTube requires authentication or browser cookies. Go to Settings > Advanced > Login Source (Cookies) to select your browser.")
+            return YtdlpError.downloadFailed(LanguageService.s("ytdlp_err_youtube_requires_authentication_or_browser"))
         }
 
         return error
@@ -8640,6 +8569,11 @@ public struct DownloadResult: Sendable {
 }
 
 enum YtdlpError: LocalizedError {
+    /// A localized failure whose `key` text has one `%@` for the underlying cause.
+    static func downloadFailed(key: String, cause: Error) -> YtdlpError {
+        .downloadFailed(String(format: LanguageService.s(key), cause.localizedDescription))
+    }
+
     case notFound
     case parseError
     case noDownloadableFormats
@@ -8657,33 +8591,33 @@ enum YtdlpError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .notFound:
-            return "yt-dlp not found. Download dependencies in Settings > Advanced."
+            return LanguageService.s("ytdlp_err_not_found")
         case .parseError:
-            return "Failed to parse data"
+            return LanguageService.s("ytdlp_err_parse")
         case .noDownloadableFormats:
             return LanguageService.s("no_downloadable_formats")
         case .commandFailed(let output):
-            return "Command failed: \(output)"
+            return String(format: LanguageService.s("ytdlp_err_command_failed"), output)
         case .downloadFailed(let output):
-            return output.isEmpty ? "Download failed" : output
+            return output.isEmpty ? LanguageService.s("ytdlp_err_download_failed") : output
         case .tooManyRequests:
-            return "429: Too Many Requests"
+            return LanguageService.s("ytdlp_err_too_many_requests")
         case .subtitleError(let output):
-            return "Subtitle error: \(output)"
+            return String(format: LanguageService.s("ytdlp_err_subtitle"), output)
         case .cloudflareBlocked:
-            return "Blocked by Cloudflare anti-bot protection. Siphon could not complete the browser challenge automatically."
+            return LanguageService.s("ytdlp_err_cloudflare")
         case .ffmpegInstallationFailed(let path):
-            return "FFmpeg installation failed. Please try updating dependencies again. Attempted path: \(path)"
+            return String(format: LanguageService.s("ytdlp_err_ffmpeg_install"), path)
         case .protectedSiteNeedsBrowserCookies:
-            return "This video site requires signed-in browser cookies. Open Settings > Advanced > Login Source (Cookies), choose your browser, then try again."
+            return LanguageService.s("ytdlp_err_needs_browser_cookies")
         case .protectedSiteLoginRequired:
             // BoyfriendTV only. Without "Remember me", Safari never saves the site's
             // login cookie to disk, so the sign-in happens in Siphon's window.
-            return "BoyfriendTV shows this video only to signed-in members. Retry and sign in in the BoyfriendTV window that opens, with “Remember me” ticked."
+            return LanguageService.s("ytdlp_err_login_required")
         case .safariCookiesFullDiskAccessRequired:
             return LanguageService.s("safari_fda_required")
         case .securityViolation(let message):
-            return "Security violation: \(message)"
+            return String(format: LanguageService.s("ytdlp_err_security_violation"), message)
         }
     }
 }
