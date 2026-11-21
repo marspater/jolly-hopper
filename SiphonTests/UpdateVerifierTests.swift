@@ -369,14 +369,17 @@ final class UpdateVerifierTests: XCTestCase {
         let stuck = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
         let older = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
         let newest = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
-        try configure(stuck, date: 1)
-        try configure(older, date: 2)
+        // Newest first: the undeletable backup comes before a removable one,
+        // so a loop that stopped at the failure would leave `older` behind.
+        try configure(stuck, date: 2)
+        try configure(older, date: 1)
         try configure(newest, date: 3)
         let stuckContents = stuck.appendingPathComponent("Contents")
         try fileManager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: stuckContents.path)
         defer { try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: stuckContents.path) }
 
         XCTAssertNoThrow(try UpdateInstaller.pruneRecoveryBackups(nextTo: fixture.current))
+        XCTAssertTrue(fileManager.fileExists(atPath: stuck.path), "the failure setup did not block removal")
         XCTAssertFalse(fileManager.fileExists(atPath: older.path))
         XCTAssertTrue(fileManager.fileExists(atPath: newest.path))
     }
