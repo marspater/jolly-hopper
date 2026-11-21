@@ -2174,14 +2174,6 @@ public struct DownloadResult: Sendable {
                 catch { LoggerService.shared.log("Could not remove download scratch directory: \(error.localizedDescription)", level: .warning) }
             }
         }
-        // Registered before any later throw (argument parsing, cookie files) so none leaks it.
-        defer {
-            // Executor-owned directories survive a pause and are cleaned at job teardown.
-            if temporaryDirectory == nil {
-                do { try FileManager.default.removeItem(at: scratchDirectory) }
-                catch { LoggerService.shared.log("Could not remove download scratch directory: \(error.localizedDescription)", level: .warning) }
-            }
-        }
         args.append(contentsOf: ["--paths", "home:\(options.saveFolder.path)"])
         args.append(contentsOf: ["--paths", "temp:\(scratchDirectory.path)"])
         let thumbnailDirectory = options.downloadThumbnail ? options.saveFolder : scratchDirectory
