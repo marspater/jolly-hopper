@@ -441,14 +441,15 @@ struct HeroDropURLView: View {
         _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.url.identifier) { data, error in
             Self.logDropFailure(error)
 
-            if let raw = data.flatMap(Self.droppedURL(from:)) {
-                Task { @MainActor in
-                    if let original = DownloadURLValidator.extractURLs(from: raw.replacingOccurrences(of: "\0", with: "\n")).first {
-                        inputURL = original
-                        submitURL()
-                    } else {
-                        feedback.show(languageService.s("hero_invalid_url"), isSuccess: false, icon: "exclamationmark.circle.fill")
-                    }
+            let raw = data.flatMap(Self.droppedURL(from:))
+            Task { @MainActor in
+                // An unreadable or non-URL drop gets the same feedback as an invalid one.
+                if let raw,
+                   let original = DownloadURLValidator.extractURLs(from: raw.replacingOccurrences(of: "\0", with: "\n")).first {
+                    inputURL = original
+                    submitURL()
+                } else {
+                    feedback.show(languageService.s("hero_invalid_url"), isSuccess: false, icon: "exclamationmark.circle.fill")
                 }
             }
         }

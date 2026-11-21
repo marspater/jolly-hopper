@@ -33,7 +33,7 @@ jobs:
         run: |
           set -euo pipefail
           node --version
-          node -e 'const major = Number(process.versions.node.split(".")[0]); if (major < 24) { throw new Error("Node.js 24+ is required"); }'
+          node -e 'const major = Number(process.versions.node.split(".")[0]); if (major < 26) { throw new Error("Node.js 26+ is required"); }'
 
       - name: Check JavaScript syntax
         shell: bash

@@ -638,8 +638,11 @@ struct FileThumbnailView: View {
 
     private func generateThumbnail() async {
         guard thumbnailImage == nil else { return }
-        if let image = await ImageUtilities.generateThumbnail(for: fileURL) {
-            ThumbnailCache.store(image, for: fileURL)
+        let url = fileURL
+        if let image = await ImageUtilities.generateThumbnail(for: url) {
+            ThumbnailCache.store(image, for: url)
+            // The row may have moved to another file while this ran: keep the image cached, not shown.
+            guard !Task.isCancelled else { return }
             await MainActor.run {
                 self.thumbnailImage = image
             }

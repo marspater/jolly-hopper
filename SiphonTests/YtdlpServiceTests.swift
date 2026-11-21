@@ -1626,10 +1626,10 @@ final class YtdlpServiceTests: XCTestCase {
                        "https://ffmpeg.martin-riedl.de/download/macos/arm64/1_9.0.2/ffprobe.zip")
         #if arch(arm64)
         XCTAssertEqual(DependencyChecksums.ffmpegURL.absoluteString,
-                       "https://ffmpeg.martin-riedl.de/download/macos/arm64/1789931890_9.0.2/ffmpeg.zip")
+                       "https://ffmpeg.martin-riedl.de/download/macos/arm64/1795207104_9.1/ffmpeg.zip")
         #else
         XCTAssertEqual(DependencyChecksums.ffmpegURL.absoluteString,
-                       "https://ffmpeg.martin-riedl.de/download/macos/amd64/1789931006_9.0.2/ffmpeg.zip")
+                       "https://ffmpeg.martin-riedl.de/download/macos/amd64/1795212433_9.1/ffmpeg.zip")
         #endif
     }
 
@@ -7721,5 +7721,11 @@ final class YtdlpServiceTests: XCTestCase {
         let gtBoundaryUUID = try XCTUnwrap(UUID(uuidString: YtdlpService.gayteamBoundaryDataStoreIdentifier))
         XCTAssertTrue(removedUUIDs.value.contains(gtUUID))
         XCTAssertTrue(removedUUIDs.value.contains(gtBoundaryUUID))
+    }
+
+    func testAssumedWidescreenResolutionClampsHugeHeights() {
+        XCTAssertEqual(YtdlpService.assumedWidescreenResolution(height: 720), "1280x720")
+        XCTAssertEqual(YtdlpService.assumedWidescreenResolution(height: Int.max), "29127x16384")
+        XCTAssertEqual(YtdlpService.assumedWidescreenResolution(height: -5), "0x0")
     }
 }

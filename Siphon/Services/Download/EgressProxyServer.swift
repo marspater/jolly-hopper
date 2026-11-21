@@ -287,10 +287,19 @@ public final class EgressProxyServer: @unchecked Sendable {
 
     private func handleClientConnection(_ client: NWConnection) {
         client.start(queue: queue)
-        receiveInitialRequest(client: client, accumulatedData: Data())
+        // A local client that connects and never finishes its request would hold
+        // the connection (and its buffer) open forever, authenticated or not.
+        let headerRead = AtomicBox(false)
+        queue.asyncAfter(deadline: .now() + requestHeaderTimeout) {
+            if !headerRead.get() { client.cancel() }
+        }
+        receiveInitialRequest(client: client, accumulatedData: Data(), headerRead: headerRead)
     }
 
-    private func receiveInitialRequest(client: NWConnection, accumulatedData: Data) {
+    /// Set before `start()`; tests shorten it.
+    var requestHeaderTimeout: TimeInterval = 30
+
+    private func receiveInitialRequest(client: NWConnection, accumulatedData: Data, headerRead: AtomicBox<Bool>) {
         client.receive(minimumIncompleteLength: 1, maximumLength: 16384) { [weak self] content, _, isComplete, error in
             guard let self = self else {
                 client.cancel()
@@ -310,6 +319,7 @@ public final class EgressProxyServer: @unchecked Sendable {
             // Look for header boundary: \r\n\r\n or \n\n
             let boundaryRange = buffer.range(of: Data("\r\n\r\n".utf8)) ?? buffer.range(of: Data("\n\n".utf8))
             if let headerEndRange = boundaryRange {
+                headerRead.set(true)
                 guard headerEndRange.lowerBound <= 32768 else {
                     self.sendResponse(client: client, status: "400 Bad Request", body: "Header too large\n", close: true)
                     return
@@ -318,9 +328,10 @@ public final class EgressProxyServer: @unchecked Sendable {
                 let remainingData = buffer.subdata(in: headerEndRange.upperBound..<buffer.count)
                 self.processRequest(client: client, headerData: headerData, remainingData: remainingData)
             } else if isComplete || buffer.count > 32768 {
+                headerRead.set(true)
                 self.sendResponse(client: client, status: "400 Bad Request", body: "Header too large\n", close: true)
             } else {
-                self.receiveInitialRequest(client: client, accumulatedData: buffer)
+                self.receiveInitialRequest(client: client, accumulatedData: buffer, headerRead: headerRead)
             }
         }
     }

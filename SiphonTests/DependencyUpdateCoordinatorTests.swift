@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Combine
 @testable import Siphon
 
 @MainActor
@@ -27,6 +28,42 @@ final class DependencyUpdateCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(coordinator.isUpdating)
         XCTAssertEqual(coordinator.updateProgress, 0.75)
+    }
+
+    func testConcurrentUpdateTriggersRunOnceWithoutFalseFailure() async {
+        let coordinator = DependencyUpdateCoordinator(notificationService: nil)
+        let service = YtdlpService()
+        // Not bound, so the mirrored isUpdating stays false and only the
+        // in-flight guard can refuse the second trigger.
+        let (entered, enteredContinuation) = AsyncStream<Void>.makeStream()
+        let (release, releaseContinuation) = AsyncStream<Void>.makeStream()
+        var handlerCalls = 0
+        service.updateYtdlpHandler = {
+            handlerCalls += 1
+            enteredContinuation.yield()
+            for await _ in release { break }
+            return "2026.11.21"
+        }
+
+        var titles: [String] = []
+        let sub = coordinator.$updateMessage.sink { if let t = $0?.title { titles.append(t) } }
+        defer { sub.cancel() }
+
+        let first = Task { await coordinator.updateYtdlp(service: service) }
+        for await _ in entered { break }
+        XCTAssertFalse(coordinator.isUpdating)
+
+        await coordinator.updateYtdlp(service: service)
+        XCTAssertEqual(handlerCalls, 1)
+        XCTAssertFalse(titles.contains(LanguageService.shared.s("ytdlp_update_failed_title")), "second trigger published a false failure")
+
+        releaseContinuation.yield()
+        await first.value
+
+        XCTAssertEqual(handlerCalls, 1)
+        XCTAssertFalse(titles.contains(LanguageService.shared.s("ytdlp_update_failed_title")), "second trigger published a false failure")
+        XCTAssertEqual(coordinator.version, "2026.11.21")
+        XCTAssertEqual(coordinator.updateMessage?.title, LanguageService.shared.s("ytdlp_update_success_title"))
     }
 
     func testInitializeWithNonDefaultRunner() async {

@@ -166,11 +166,11 @@ public class Download: ObservableObject, Identifiable {
     public var ownedOutputFiles: [URL: Int] = [:]
 
     public nonisolated static func encodeOwnedOutputFiles(_ files: [URL: Int]) -> [String: Int]? {
-        files.isEmpty ? nil : Dictionary(uniqueKeysWithValues: files.map { ($0.key.path, $0.value) })
+        files.isEmpty ? nil : Dictionary(files.map { ($0.key.path, $0.value) }, uniquingKeysWith: { _, last in last })
     }
 
     public nonisolated static func decodeOwnedOutputFiles(_ files: [String: Int]?) -> [URL: Int] {
-        Dictionary(uniqueKeysWithValues: (files ?? [:]).map { (URL(fileURLWithPath: $0.key), $0.value) })
+        Dictionary((files ?? [:]).map { (URL(fileURLWithPath: $0.key), $0.value) }, uniquingKeysWith: { _, last in last })
     }
     public var hasPlayableOutput: Bool {
         !filePaths.isEmpty && (status == .completed || (status == .failed && hasPartialFailure))

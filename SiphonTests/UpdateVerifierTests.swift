@@ -354,6 +354,36 @@ final class UpdateVerifierTests: XCTestCase {
         }
     }
 
+    func testBackupCleanupContinuesPastAnUndeletableBackup() throws {
+        let fixture = try makeReplacementFixtures()
+        let fileManager = FileManager.default
+        let root = fixture.current.deletingLastPathComponent()
+        func configure(_ url: URL, date: TimeInterval) throws {
+            let contents = url.appendingPathComponent("Contents")
+            try fileManager.createDirectory(at: contents, withIntermediateDirectories: true)
+            let info = try PropertyListSerialization.data(fromPropertyList: ["CFBundleIdentifier": "test.siphon"], format: .xml, options: 0)
+            try info.write(to: contents.appendingPathComponent("Info.plist"))
+            try fileManager.setAttributes([.modificationDate: Date(timeIntervalSince1970: date)], ofItemAtPath: url.path)
+        }
+        try configure(fixture.current, date: 0)
+        let stuck = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
+        let older = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
+        let newest = root.appendingPathComponent(".Siphon_Backup_\(UUID().uuidString).app")
+        // Newest first: the undeletable backup comes before a removable one,
+        // so a loop that stopped at the failure would leave `older` behind.
+        try configure(stuck, date: 2)
+        try configure(older, date: 1)
+        try configure(newest, date: 3)
+        let stuckContents = stuck.appendingPathComponent("Contents")
+        try fileManager.setAttributes([.posixPermissions: 0o500], ofItemAtPath: stuckContents.path)
+        defer { try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: stuckContents.path) }
+
+        XCTAssertNoThrow(try UpdateInstaller.pruneRecoveryBackups(nextTo: fixture.current))
+        XCTAssertTrue(fileManager.fileExists(atPath: stuck.path), "the failure setup did not block removal")
+        XCTAssertFalse(fileManager.fileExists(atPath: older.path))
+        XCTAssertTrue(fileManager.fileExists(atPath: newest.path))
+    }
+
     func testBackupCleanupNeverDeletesTheRunningRecoveryBundle() throws {
         let fixture = try makeReplacementFixtures()
         let root = fixture.current.deletingLastPathComponent()
