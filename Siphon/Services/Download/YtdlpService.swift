@@ -6355,8 +6355,9 @@ public struct DownloadResult: Sendable {
 
     enum BestCamStreamCipher {
         // The CDN derives the AES-256-CTR key from the MD5 hex of the file name.
+        // MD5 is fixed by that remote protocol; it protects nothing on our side.
         static func deriveKeyHex(from string: String) -> String {
-            Insecure.MD5.hash(data: Data(string.utf8)).map { String(format: "%02x", $0) }.joined()
+            Insecure.MD5.hash(data: Data(string.utf8)).map { String(format: "%02x", $0) }.joined() // NOSONAR: protocol-mandated key derivation, not a security hash
         }
     }
 

@@ -308,7 +308,9 @@ final class DownloadExecutor {
         }
         download.log.append(sanitized)
     }
+}
 
+extension DownloadExecutor {
     // MARK: - Download Execution
 
     func executeDownload(

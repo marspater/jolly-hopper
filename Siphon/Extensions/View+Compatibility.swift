@@ -110,7 +110,7 @@ public struct RenderingCapabilities: Sendable, Equatable {
 
 @MainActor
 @Observable
-public final class AdaptiveRenderingEnvironment {
+final class AdaptiveRenderingEnvironment {
     public static let shared = AdaptiveRenderingEnvironment()
 
     public private(set) var capabilities: RenderingCapabilities
@@ -338,7 +338,7 @@ private struct SiphonAdaptiveRenderingModifier: ViewModifier {
 // MARK: - Reusable Managed Transient Feedback Pattern
 @MainActor
 @Observable
-public final class TransientFeedbackState {
+final class TransientFeedbackState {
     public struct Item: Equatable {
         public let id = UUID()
         public let message: String
