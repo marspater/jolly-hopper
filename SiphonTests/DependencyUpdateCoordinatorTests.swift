@@ -33,9 +33,15 @@ final class DependencyUpdateCoordinatorTests: XCTestCase {
     func testConcurrentUpdateTriggersRunOnceWithoutFalseFailure() async {
         let coordinator = DependencyUpdateCoordinator(notificationService: nil)
         let service = YtdlpService()
-        coordinator.bind(to: service)
+        // Not bound, so the mirrored isUpdating stays false and only the
+        // in-flight guard can refuse the second trigger.
+        let (entered, enteredContinuation) = AsyncStream<Void>.makeStream()
+        let (release, releaseContinuation) = AsyncStream<Void>.makeStream()
+        var handlerCalls = 0
         service.updateYtdlpHandler = {
-            try await Task.sleep(nanoseconds: 100_000_000)
+            handlerCalls += 1
+            enteredContinuation.yield()
+            for await _ in release { break }
             return "2026.11.21"
         }
 
@@ -43,10 +49,18 @@ final class DependencyUpdateCoordinatorTests: XCTestCase {
         let sub = coordinator.$updateMessage.sink { if let t = $0?.title { titles.append(t) } }
         defer { sub.cancel() }
 
-        async let first: Void = coordinator.updateYtdlp(service: service)
-        async let second: Void = coordinator.updateYtdlp(service: service)
-        _ = await (first, second)
+        let first = Task { await coordinator.updateYtdlp(service: service) }
+        for await _ in entered { break }
+        XCTAssertFalse(coordinator.isUpdating)
 
+        await coordinator.updateYtdlp(service: service)
+        XCTAssertEqual(handlerCalls, 1)
+        XCTAssertFalse(titles.contains(LanguageService.shared.s("ytdlp_update_failed_title")), "second trigger published a false failure")
+
+        releaseContinuation.yield()
+        await first.value
+
+        XCTAssertEqual(handlerCalls, 1)
         XCTAssertFalse(titles.contains(LanguageService.shared.s("ytdlp_update_failed_title")), "second trigger published a false failure")
         XCTAssertEqual(coordinator.version, "2026.11.21")
         XCTAssertEqual(coordinator.updateMessage?.title, LanguageService.shared.s("ytdlp_update_success_title"))
