@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Siphon
 @testable import SiphonCore
@@ -40,9 +41,19 @@ struct BrowserUtilsTests {
         #expect(chromiumBased.displayName == "Chromium-based")
         #expect(chromiumBased.bundleIdentifier == "net.imput.helium")
         #expect(SupportedBrowser.allCases.contains(.chromiumBased))
+    }
+}
 
-        // Backward compatibility alias
-        let helium = SupportedBrowser.helium
-        #expect(helium == .chromiumBased)
+struct DeepLinkRouteTests {
+    @Test func parsesDownloadAndFastDownloadWithoutCredentials() throws {
+        let link = try #require(URL(string: "siphon://Fast-Download?url=https%3A%2F%2Fexample.com%2Fv&ua=UA&browser=chrome&cookies=secret"))
+        #expect(DeepLinkRoute(link) == .download(url: "https://example.com/v", isFastDownload: true, userAgent: "UA", browserSource: "chrome"))
+        let plain = try #require(URL(string: "siphon://download?url=https%3A%2F%2Fexample.com%2Fv"))
+        #expect(DeepLinkRoute(plain) == .download(url: "https://example.com/v", isFastDownload: false, userAgent: nil, browserSource: nil))
+    }
+
+    @Test func unknownHostsAreOther() throws {
+        #expect(DeepLinkRoute(try #require(URL(string: "siphon://settings"))) == .other)
+        #expect(DeepLinkRoute(try #require(URL(string: "siphon:///download"))) == .other)
     }
 }

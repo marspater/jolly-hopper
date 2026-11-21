@@ -15,11 +15,10 @@ struct MenuBarView: View {
     @State private var url: String = ""
     @State private var selectedType: String = "video"
     @State private var selectedPreset: String = "best_quality"
-    @AppStorage(UserDefaultsKeys.theme) private var theme: String = "system"
     @AppStorage("customPresets") private var customPresetsData: Data = Data()
 
     @State private var customPresets: [CustomPreset] = []
-    @StateObject private var pasteFeedback = TransientFeedbackState()
+    @State private var pasteFeedback = TransientFeedbackState()
     @State private var isShowMainWindowHovered = false
     @State private var isQuitHovered = false
 

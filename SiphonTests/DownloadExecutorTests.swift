@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Testing
 @testable import Siphon
 @testable import SiphonCore
 
@@ -72,40 +73,6 @@ final class DownloadExecutorTests: XCTestCase {
         XCTAssertEqual(DownloadExecutor.recoveryProgressBucket(for: 1.5), 20)
     }
 
-    func testTemporaryFileMatching() {
-        XCTAssertTrue(DownloadExecutor.isTemporaryFileName("video.mp4.part"))
-        XCTAssertTrue(DownloadExecutor.isTemporaryFileName("video.mp4.ytdl"))
-        XCTAssertTrue(DownloadExecutor.isTemporaryFileName("video.mp4.temp"))
-        XCTAssertTrue(DownloadExecutor.isTemporaryFileName("video.mp4.tmp"))
-        XCTAssertFalse(DownloadExecutor.isTemporaryFileName("video.mp4"))
-
-        XCTAssertTrue(DownloadExecutor.shouldCleanupTemporaryFiles(for: .stopped))
-        XCTAssertTrue(DownloadExecutor.shouldCleanupTemporaryFiles(for: .failed))
-        XCTAssertFalse(DownloadExecutor.shouldCleanupTemporaryFiles(for: .downloading))
-        XCTAssertFalse(DownloadExecutor.shouldCleanupTemporaryFiles(for: .completed))
-
-        XCTAssertTrue(DownloadExecutor.isMatchingTemporaryFile(
-            fileName: "MyVideo.mp4.part",
-            rawBaseName: "MyVideo",
-            sanitizedBaseName: "MyVideo",
-            videoId: "12345"
-        ))
-
-        XCTAssertFalse(DownloadExecutor.isMatchingTemporaryFile(
-            fileName: "SomeOther_12345.mp4.part",
-            rawBaseName: "MyVideo",
-            sanitizedBaseName: "MyVideo",
-            videoId: "12345"
-        ), "Must not match unrelated file with videoId substring")
-
-        XCTAssertFalse(DownloadExecutor.isMatchingTemporaryFile(
-            fileName: "Unrelated.mp4.part",
-            rawBaseName: "MyVideo",
-            sanitizedBaseName: "MyVideo",
-            videoId: "12345"
-        ))
-    }
-
     func testCleanupNeverDeletesUnownedSaveFolderPartials() throws {
         let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
@@ -126,12 +93,6 @@ final class DownloadExecutorTests: XCTestCase {
             FileManager.default.fileExists(atPath: partial.path),
             "Cleanup must not infer ownership from a filename and delete another process's partial"
         )
-    }
-
-    func testVideoIdExtraction() {
-        XCTAssertEqual(DownloadExecutor.extractVideoId(from: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"), "dQw4w9WgXcQ")
-        XCTAssertEqual(DownloadExecutor.extractVideoId(from: "https://youtu.be/dQw4w9WgXcQ"), "dQw4w9WgXcQ")
-        XCTAssertEqual(DownloadExecutor.extractVideoId(from: "invalid_url"), "invalid_url")
     }
 
     final class ResultBox: @unchecked Sendable {
@@ -954,5 +915,29 @@ final class DownloadExecutorTests: XCTestCase {
         // Stopping this download must not crash or output ___FETCHING___
         executor.stopDownload(download, queue: DownloadQueue(), suppressNotification: false)
         XCTAssertEqual(download.status, .stopped)
+    }
+}
+
+@MainActor
+@Suite("Download activity assertion")
+struct DownloadActivityAssertionTests {
+    @Test func assertionIsHeldUntilEndedAndEndingIsIdempotent() {
+        let executor = DownloadExecutor(ytdlpService: YtdlpService(processRunner: MockYtdlpProcessRunner()))
+        let id = UUID()
+        #expect(!executor.hasActivityAssertion(for: id))
+        executor.beginActivityAssertion(for: id)
+        executor.beginActivityAssertion(for: id)
+        #expect(executor.hasActivityAssertion(for: id))
+        executor.endActivityAssertion(for: id)
+        executor.endActivityAssertion(for: id)
+        #expect(!executor.hasActivityAssertion(for: id))
+    }
+
+    @Test func assertionIsReleasedWhenAnAttemptEndsWithoutRunning() async {
+        let executor = DownloadExecutor(ytdlpService: YtdlpService(processRunner: MockYtdlpProcessRunner()))
+        let download = Download(url: "https://example.com/v", options: .default, title: "t")
+        download.status = .completed
+        await executor.executeDownload(download, queue: DownloadQueue(), ytdlpVersion: nil, languageService: nil)
+        #expect(!executor.hasActivityAssertion(for: download.id))
     }
 }

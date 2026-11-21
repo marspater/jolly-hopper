@@ -11,8 +11,9 @@ public enum LogSanitizer {
         (#"(?i)cookie:\s*[^\r\n]+"#, "Cookie: <REDACTED>"),
         (#"(?i)set-cookie:\s*[^\r\n]+"#, "Set-Cookie: <REDACTED>"),
         (#"(?i)(x-[a-z0-9\-]*api-key|x-[a-z0-9\-]*token|x-[a-z0-9\-]*auth[a-z0-9\-]*):\s*[^\r\n]+"#, "$1: <REDACTED>"),
-        (#"(?i)(token|api_key|password|pass|secret|auth|signature|sig|access_token|session|sessionid|sess|jwt|key|apikey|private_key|client_secret|pcode|oauth_token)=([^\s&"'<>]+)"#, "$1=<REDACTED>"),
-        (#"(?i)(["'])(token|api_key|password|pass|secret|auth|signature|sig|access_token|session|sessionid|sess|jwt|key|apikey|private_key|client_secret|pcode|oauth_token)\1\s*:\s*(["'])(?:\\.|(?!\3)[^\\])*\3"#, "$1$2$1: $3<REDACTED>$3")
+        (#"(?i)(token|api_key|password|passwd|pass|secret|credential|auth|signature|sig|access_token|session|sessionid|sess|jwt|key|apikey|private_key|client_secret|pcode|oauth_token)=([^\s&"'<>]+)"#, "$1=<REDACTED>"),
+        // Keys that end in a secret word too: refresh_token, id_token, accessToken, X-Amz-Credential.
+        (#"(?i)(["'])((?:[a-z0-9]+[_\-])*(?:token|password|passwd|secret|credential|apikey|api_key|private_key|signature|jwt|pass|auth|sig|session|sessionid|sess|key|pcode)|[a-z0-9]*(?:Token|Password|Secret|Credential|ApiKey|Signature))\1\s*:\s*(["'])(?:\\.|(?!\3)[^\\])*\3"#, "$1$2$1: $3<REDACTED>$3")
     ].compactMap { pattern, replacement in
         guard let regex = try? NSRegularExpression(pattern: pattern, options: []) else { return nil }
         return (regex, replacement)

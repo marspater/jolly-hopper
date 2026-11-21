@@ -4,6 +4,8 @@
 //
 
 import XCTest
+import Testing
+import Foundation
 import Security
 import CryptoKit
 import os
@@ -1030,6 +1032,19 @@ final class UpdateVerifierTests: XCTestCase {
         XCTAssertNotNil(checker.updateError)
         XCTAssertTrue(checker.updateError?.contains("Signature verification failed") == true || checker.updateError?.contains("signature") == true)
     }
+
+    func testStaleUpdateMountPointsMatchOnlyStagedImages() throws {
+        let staged = "/var/folders/xx/T/Siphon_Update_"
+        let info: [String: Any] = ["images": [
+            ["image-path": "/private/var/folders/xx/T/Siphon_Update_\(UUID().uuidString).dmg",
+             "system-entities": [["dev-entry": "/dev/disk9"], ["dev-entry": "/dev/disk9s1", "mount-point": "/Volumes/Siphon"]]],
+            ["image-path": "/Users/me/Downloads/Other.dmg",
+             "system-entities": [["dev-entry": "/dev/disk8s1", "mount-point": "/Volumes/Other"]]],
+        ]]
+        let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+        XCTAssertEqual(UpdateInstaller.staleUpdateMountPoints(hdiutilInfo: data, stagedPrefix: staged), ["/Volumes/Siphon"])
+        XCTAssertEqual(UpdateInstaller.staleUpdateMountPoints(hdiutilInfo: Data("junk".utf8), stagedPrefix: staged), [])
+    }
 }
 
 private final class OfflineUpdateURLProtocol: URLProtocol, @unchecked Sendable {
@@ -1060,17 +1075,26 @@ private actor UpdateManifestFetchGate {
         continuation?.resume()
         continuation = nil
     }
+}
 
-    func testStaleUpdateMountPointsMatchOnlyStagedImages() throws {
-        let staged = "/var/folders/xx/T/Siphon_Update_"
-        let info: [String: Any] = ["images": [
-            ["image-path": "/private/var/folders/xx/T/Siphon_Update_\(UUID().uuidString).dmg",
-             "system-entities": [["dev-entry": "/dev/disk9"], ["dev-entry": "/dev/disk9s1", "mount-point": "/Volumes/Siphon"]]],
-            ["image-path": "/Users/me/Downloads/Other.dmg",
-             "system-entities": [["dev-entry": "/dev/disk8s1", "mount-point": "/Volumes/Other"]]],
-        ]]
-        let data = try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
-        XCTAssertEqual(UpdateInstaller.staleUpdateMountPoints(hdiutilInfo: data, stagedPrefix: staged), ["/Volumes/Siphon"])
-        XCTAssertEqual(UpdateInstaller.staleUpdateMountPoints(hdiutilInfo: Data("junk".utf8), stagedPrefix: staged), [])
+struct UpdateErrorLocalizationTests {
+    @Test func everyUpdateErrorDescriptionComesFromItsKey() {
+        let url = URL(fileURLWithPath: "/tmp/x")
+        let cases: [(Error, String)] = [
+            (UpdateDownloadError.invalidURL, "update_err_invalid_url"),
+            (UpdateDownloadError.downloadFailed("boom"), "update_err_download_failed"),
+            (UpdateInstallError.packageNotFound(url), "update_err_package_not_found"),
+            (UpdateInstallError.rollbackFailed("boom"), "update_err_rollback_failed"),
+            (UpdateVerificationError.codeSignatureInvalid(-67062, "boom"), "update_err_code_signature"),
+            (UpdateVerificationError.teamIDMismatch(expected: "A", actual: nil), "update_err_team_id"),
+            (ManifestVerificationError.versionMismatch(expected: "1", actual: "2"), "update_err_manifest_version"),
+            (ManifestVerificationError.manifestNotFound, "update_err_manifest_missing"),
+        ]
+        for (error, key) in cases {
+            let template = LanguageService.s(key)
+            // s() falls back to the key's words, capitalized, when no translation exists.
+            #expect(template != key.replacingOccurrences(of: "_", with: " ").capitalized, "missing translation for \(key)")
+            #expect(error.localizedDescription.hasPrefix(template.components(separatedBy: "%").first ?? template), "\(key)")
+        }
     }
 }

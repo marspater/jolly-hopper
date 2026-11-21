@@ -1,26 +1,15 @@
-import SwiftUI
+import Foundation
 import SiphonCore
 import Combine
-
-enum Language: String, CaseIterable, Identifiable {
-    case english = "en"
-
-    var id: String { self.rawValue }
-
-    var displayName: String {
-        return "English"
-    }
-}
 
 @MainActor
 class LanguageService: ObservableObject {
     public static let shared = LanguageService()
-    @AppStorage("selectedLanguage", store: UITestLaunchMode.defaults) var selectedLanguage: Language = .english
 
     // Bolt Performance Optimization: Single-pass character replacement avoiding
     // preliminary scans, intermediate array allocations, and NSString bridging.
     nonisolated static func s(_ key: String) -> String {
-        if let translated = staticTranslations[key] {
+        if let translated = staticTranslations[key] ?? errorTranslations[key] {
             return translated
         }
         var spaceSeparated = ""
@@ -261,8 +250,6 @@ class LanguageService: ObservableObject {
         "metadata_timed_out": "yt-dlp did not finish reading this page within 2 minutes, so Siphon stopped it. Try again, or check the link and your connection.",
         "clear_sites_failed": "Some site data could not be cleared. Close any open site windows and try again.",
         "update_ready_message": "Restart Siphon to finish updating.",
-        "language_changed_title": "Language Changed",
-        "language_changed_message": "Some text updates after Siphon restarts.",
         "stop_all": "Stop All",
         "retry": "Retry / Resume",
         "stop": "Stop",

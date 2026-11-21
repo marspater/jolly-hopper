@@ -58,8 +58,8 @@ struct AddDownloadView: View {
     @AppStorage(UserDefaultsKeys.resolutionFallbackPolicy) private var resolutionFallbackPolicyRaw: String = ResolutionFallbackPolicy.strictCeiling.rawValue
 
     @State private var downloadSubtitles: Bool = false
-    @StateObject private var pasteFeedback = TransientFeedbackState()
-    @StateObject private var importFeedback = TransientFeedbackState()
+    @State private var pasteFeedback = TransientFeedbackState()
+    @State private var importFeedback = TransientFeedbackState()
     @State private var existingFileCheckTask: Task<Void, Never>?
     @State private var selectedSubtitleLangs: Set<String> = []
     @State private var availableSubtitles: [SubtitleOption] = []

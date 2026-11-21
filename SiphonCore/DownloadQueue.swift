@@ -4,10 +4,9 @@
 //
 
 import Foundation
-import Combine
 
 @preconcurrency @MainActor
-public final class DownloadQueue: ObservableObject {
+public final class DownloadQueue {
     public private(set) var reservedDownloadSlots: Set<UUID> = []
     public private(set) var reservedOutputPaths: Set<String> = []
     private let userDefaults: UserDefaults
@@ -210,24 +209,6 @@ public final class DownloadQueue: ObservableObject {
         guard name.hasPrefix(prefix), name.hasSuffix(")"),
               let suffix = Int(name.dropFirst(prefix.count).dropLast()), suffix > 0, suffix < Int.max else { return 1 }
         return suffix + 1
-    }
-
-    @discardableResult
-    public func reserveUniqueOutputPath(
-        for download: Download,
-        forceIncrement: Bool = false,
-        fileManager: FileManager = .default
-    ) -> (resolvedBaseName: String, candidatePath: String) {
-        let (candidateName, candidatePath) = planUniqueOutputPath(
-            for: download,
-            forceIncrement: forceIncrement,
-            fileManager: fileManager
-        )
-        reserveOutputPath(candidatePath)
-        if download.title != Download.fetchingPlaceholder || download.options.customFilename != nil {
-            download.resolvedOutputBaseName = candidateName
-        }
-        return (candidateName, candidatePath)
     }
 
     public func reserveOutputPath(_ path: String) {

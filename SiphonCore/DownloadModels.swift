@@ -167,7 +167,7 @@ public enum DownloadURLValidationResult: Equatable, Sendable {
     case malformed
 }
 
-public struct DownloadURLValidator: Sendable {
+public enum DownloadURLValidator {
     public static func validate(_ input: String) -> DownloadURLValidationResult {
         let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return .empty }

@@ -489,14 +489,4 @@ public final class UpdateChecker: ObservableObject {
             self.latestVersion = latestVersion
         }
     }
-
-    // MARK: - Compatibility & Static Verification Helpers
-
-    nonisolated public static func isTrustedGitHubURL(_ url: URL) -> Bool {
-        UpdateDownloader.isTrustedGitHubURL(url)
-    }
-
-    nonisolated public static func computeSHA256(for fileURL: URL) -> String? {
-        try? UpdateVerifier.computeSHA256(for: fileURL)
-    }
 }

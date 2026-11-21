@@ -397,15 +397,6 @@ class DownloadManager: ObservableObject {
         Task.isCancelled || (isShuttingDown && !executor.hasActiveTask(for: downloadID))
     }
 
-    func executeDownload(_ download: Download) async {
-        await executor.executeDownload(
-            download,
-            queue: queue,
-            ytdlpVersion: ytdlpService.version,
-            languageService: languageService
-        )
-    }
-
     func stopDownload(_ download: Download, suppressNotification: Bool = false, skipSaveAndBroadcast: Bool = false) {
         executor.stopDownload(
             download,
@@ -561,19 +552,6 @@ class DownloadManager: ObservableObject {
         queue.planUniqueOutputPath(for: download, forceIncrement: forceIncrement)
     }
 
-    @discardableResult
-    func reserveUniqueOutputPath(for download: Download, forceIncrement: Bool = false) -> (resolvedBaseName: String, candidatePath: String) {
-        queue.reserveUniqueOutputPath(for: download, forceIncrement: forceIncrement)
-    }
-
-    func reserveOutputPath(_ path: String) {
-        queue.reserveOutputPath(path)
-    }
-
-    func unreserveOutputPath(_ path: String) {
-        queue.unreserveOutputPath(path)
-    }
-
     func stopAllDownloads(preservePaused: Bool = false, suppressNotification: Bool = false) {
         let queuedToStop = downloads.filter {
             $0.status == .queued || (!preservePaused && $0.status == .paused)
@@ -625,32 +603,6 @@ class DownloadManager: ObservableObject {
 
     func removeDownload(_ download: Download) {
         clearDownloads([download])
-    }
-
-    nonisolated static func shouldCleanupTemporaryFiles(for status: DownloadStatus) -> Bool {
-        DownloadExecutor.shouldCleanupTemporaryFiles(for: status)
-    }
-
-    nonisolated static func extractVideoId(from urlString: String) -> String? {
-        DownloadExecutor.extractVideoId(from: urlString)
-    }
-
-    nonisolated static func isTemporaryFileName(_ fileName: String) -> Bool {
-        DownloadExecutor.isTemporaryFileName(fileName)
-    }
-
-    nonisolated static func isMatchingTemporaryFile(
-        fileName: String,
-        rawBaseName: String,
-        sanitizedBaseName: String,
-        videoId: String?
-    ) -> Bool {
-        DownloadExecutor.isMatchingTemporaryFile(
-            fileName: fileName,
-            rawBaseName: rawBaseName,
-            sanitizedBaseName: sanitizedBaseName,
-            videoId: videoId
-        )
     }
 
     func loadHistory() {
@@ -712,10 +664,6 @@ class DownloadManager: ObservableObject {
             )
             showInFinder([existing ?? fallback])
         }
-    }
-
-    func showInFinder(_ path: URL) {
-        showInFinder([path])
     }
 
     func showInFinder(_ paths: [URL]) {

@@ -261,11 +261,6 @@ public enum ExternalDownloadTargetPolicy {
         guard (bytes[0] & 0xe0) == 0x20 else { return false }
         return !isSpecialPurposeGlobalUnicastPrefix(bytes)
     }
-
-    private static func isGloballyRoutableIPv6Bytes(_ bytes: [UInt8]) -> Bool {
-        guard bytes.count == 16 else { return false }
-        return bytes.withUnsafeBytes { isGloballyRoutableIPv6Bytes($0) }
-    }
 }
 
 public struct BrowserSessionCredentials: Equatable, Sendable {
@@ -360,7 +355,6 @@ public final class AppState: ObservableObject {
 
     func initializeApplicationServices(
         ytdlpService: YtdlpService,
-        languageService: LanguageService,
         skipBinarySetup: Bool = false
     ) async {
         dependencyCoordinator.bind(to: ytdlpService)
@@ -368,13 +362,12 @@ public final class AppState: ObservableObject {
         // Do not rely on the RunLoop-delivered Combine mirror for values that
         // callers expect to be current when this async operation returns.
         ytdlpVersion = dependencyCoordinator.version
-        await checkAndFetchWhatsNew(languageService: languageService)
+        await checkAndFetchWhatsNew()
     }
 
-    func checkAndFetchWhatsNew(languageService: LanguageService) async {
+    func checkAndFetchWhatsNew() async {
         if let result = await releaseNotesService.checkAndFetchWhatsNew(
             appVersion: appVersion,
-            languageService: languageService,
             session: urlSession
         ) {
             whatsNewFeatures = result.features

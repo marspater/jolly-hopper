@@ -20,21 +20,21 @@ public enum UpdateVerificationError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .fileNotFound(let url):
-            return "File for verification does not exist at: \(url.path)"
+            return String(format: LanguageService.s("update_err_file_not_found"), url.path)
         case .checksumMismatch(let expected, let actual):
-            return "SHA-256 checksum mismatch. Expected: \(expected), calculated: \(actual)"
+            return String(format: LanguageService.s("update_err_checksum_mismatch"), expected, actual)
         case .bundleNotFound(let url):
-            return "Application bundle not found at: \(url.path)"
+            return String(format: LanguageService.s("update_err_bundle_not_found"), url.path)
         case .invalidBundleIdentifier(let expected, let actual):
-            return "Invalid bundle identifier. Expected: \(expected), got: \(actual ?? "nil")"
+            return String(format: LanguageService.s("update_err_bundle_id"), expected, actual ?? "nil")
         case .codeSignatureInvalid(let status, let msg):
-            return "Code signature check failed (OSStatus \(status)): \(msg)"
+            return String(format: LanguageService.s("update_err_code_signature"), Int(status), msg)
         case .teamIDMismatch(let expected, let actual):
-            return "Developer Team ID mismatch. Expected: \(expected), found: \(actual ?? "nil")"
+            return String(format: LanguageService.s("update_err_team_id"), expected, actual ?? "nil")
         case .architectureMismatch(let expected):
-            return "App bundle does not support required architecture: \(expected)"
+            return String(format: LanguageService.s("update_err_architecture"), expected)
         case .verificationFailed(let msg):
-            return "Verification failed: \(msg)"
+            return String(format: LanguageService.s("update_err_verification_failed"), msg)
         }
     }
 }
@@ -205,7 +205,6 @@ public struct UpdateVerifier: Sendable {
 
 public enum ManifestVerificationError: LocalizedError, Sendable {
     case invalidSignature
-    case invalidPublicKey
     case versionMismatch(expected: String, actual: String)
     case assetNotFound(String)
     case invalidChecksum(String)
@@ -216,21 +215,19 @@ public enum ManifestVerificationError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .invalidSignature:
-            return "Release manifest signature verification failed"
-        case .invalidPublicKey:
-            return "Invalid Ed25519 public key"
+            return LanguageService.s("update_err_manifest_signature")
         case .versionMismatch(let expected, let actual):
-            return "Manifest version '\(actual)' does not match release version '\(expected)'"
+            return String(format: LanguageService.s("update_err_manifest_version"), actual, expected)
         case .assetNotFound(let asset):
-            return "Asset '\(asset)' not found in signed release manifest"
+            return String(format: LanguageService.s("update_err_manifest_asset"), asset)
         case .invalidChecksum(let checksum):
-            return "Checksum '\(checksum)' in manifest is not a valid 64-character SHA-256 hex string"
+            return String(format: LanguageService.s("update_err_manifest_checksum"), checksum)
         case .manifestNotFound:
-            return "Release manifest was not found"
+            return LanguageService.s("update_err_manifest_missing")
         case .signatureNotFound:
-            return "Release manifest signature was not found"
+            return LanguageService.s("update_err_manifest_sig_missing")
         case .malformedManifest(let reason):
-            return "Release manifest is malformed: \(reason)"
+            return String(format: LanguageService.s("update_err_manifest_malformed"), reason)
         }
     }
 }
@@ -295,17 +292,6 @@ public struct UpdateManifestVerifier: Sendable {
 
     public init(publicKey: Curve25519.Signing.PublicKey = defaultPublicKey) {
         self.publicKey = publicKey
-    }
-
-    public init(publicKeyBase64: String) throws {
-        guard let data = Data(base64Encoded: publicKeyBase64.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            throw ManifestVerificationError.invalidPublicKey
-        }
-        do {
-            self.publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: data)
-        } catch {
-            throw ManifestVerificationError.invalidPublicKey
-        }
     }
 
     public static func parseSignatureData(_ signatureData: Data) throws -> Data {

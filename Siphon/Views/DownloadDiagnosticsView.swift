@@ -19,7 +19,7 @@ struct DownloadDiagnosticsView: View {
     @EnvironmentObject var languageService: LanguageService
 
     @State private var selectedTab = 0
-    @StateObject private var copyFeedback = TransientFeedbackState()
+    @State private var copyFeedback = TransientFeedbackState()
     @State private var logSearchText: String = ""
     @FocusState private var isSearchFocused: Bool
 

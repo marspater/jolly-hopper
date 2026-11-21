@@ -397,14 +397,6 @@ public struct DownloadProcessResult: Sendable {
         self.allPaths = validPaths.isEmpty ? (validPrimary.map { [$0] } ?? []) : validPaths
         self.primaryPath = validPrimary ?? self.allPaths.first ?? ""
     }
-
-    public var isEmpty: Bool {
-        primaryPath.isEmpty || allPaths.isEmpty
-    }
-
-    public var count: Int {
-        allPaths.count
-    }
 }
 
 public protocol YtdlpProcessRunning: Sendable {
@@ -471,12 +463,8 @@ public struct DefaultYtdlpProcessRunner: YtdlpProcessRunning {
         return nil
     }
 
-    public static func ensureProcessGroupHelper() -> URL? {
-        helperExecutableURL()
-    }
-
     public static func configureProcessCommand(_ process: Process, args: [String]) {
-        if let helperURL = ensureProcessGroupHelper() {
+        if let helperURL = helperExecutableURL() {
             if YtdlpService.isPathContained(targetURL: helperURL, inside: Bundle.main.bundleURL) {
                 process.executableURL = helperURL
                 process.arguments = args

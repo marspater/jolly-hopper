@@ -15,13 +15,13 @@ public enum UpdateDownloadError: LocalizedError, Sendable {
     public var errorDescription: String? {
         switch self {
         case .invalidURL:
-            return "Invalid update download URL"
+            return LanguageService.s("update_err_invalid_url")
         case .downloadCancelled:
-            return "Update download was cancelled"
+            return LanguageService.s("update_err_download_cancelled")
         case .checksumUnavailable(let msg):
-            return "Could not verify update checksum: \(msg)"
+            return String(format: LanguageService.s("update_err_checksum_unavailable"), msg)
         case .downloadFailed(let msg):
-            return "Update download failed: \(msg)"
+            return String(format: LanguageService.s("update_err_download_failed"), msg)
         }
     }
 }

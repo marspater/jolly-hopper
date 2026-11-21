@@ -1,4 +1,5 @@
 import XCTest
+import Testing
 @testable import SiphonCore
 
 final class LogSanitizerTests: XCTestCase {
@@ -176,5 +177,16 @@ final class LogSanitizerTests: XCTestCase {
         let sanitized = LogSanitizer.sanitizeLogContentForExport(raw)
         XCTAssertFalse(sanitized.contains("/Users/secret_developer_name/"))
         XCTAssertTrue(sanitized.contains("/Users/<USER>/"))
+    }
+}
+
+@Suite struct LogSanitizerSecretKeyTests {
+    @Test func jsonKeysEndingInASecretWordAreRedacted() {
+        let input = #"{"refresh_token":"r-secret","accessToken":"a-secret","X-Amz-Credential":"c-secret","author":"visible"} credential=d-secret"#
+        let sanitized = LogSanitizer.sanitizeDiagnosticText(input)
+        for secret in ["r-secret", "a-secret", "c-secret", "d-secret"] {
+            #expect(!sanitized.contains(secret))
+        }
+        #expect(sanitized.contains("visible"))
     }
 }

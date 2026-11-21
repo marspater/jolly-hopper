@@ -1,5 +1,7 @@
 #if DEBUG
 import Foundation
+import Observation
+import Synchronization
 import Testing
 import SiphonCore
 @testable import Siphon
@@ -30,6 +32,19 @@ struct PreviewFixturesTests {
 
         let after = UserDefaults.standard.persistentDomain(forName: domain) as NSDictionary?
         #expect(before == after)
+    }
+
+    @Test func transientFeedbackIsObservable() {
+        let feedback = TransientFeedbackState()
+        let changed = Mutex(false)
+        withObservationTracking {
+            _ = feedback.current
+        } onChange: {
+            changed.withLock { $0 = true }
+        }
+        feedback.show("Copied", isSuccess: true, duration: 3600)
+        #expect(changed.withLock { $0 })
+        feedback.clear()
     }
 }
 #endif

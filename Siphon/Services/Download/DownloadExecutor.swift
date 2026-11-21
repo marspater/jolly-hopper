@@ -9,7 +9,6 @@ import Synchronization
 import AppKit
 import ImageIO
 import SiphonCore
-import Combine
 
 @MainActor
 protocol DownloadExecutorDelegate: AnyObject {
@@ -120,7 +119,8 @@ extension URLSession {
     func boundedData(
         for request: URLRequest,
         delegate: (any URLSessionTaskDelegate)? = nil,
-        limit: Int = 8 * 1024 * 1024
+        limit: Int = 8 * 1024 * 1024,
+        deadline: Duration = .seconds(120)
     ) async throws -> (Data, URLResponse) {
         var request = request
         if request.url?.scheme?.lowercased() == "http",
@@ -128,15 +128,33 @@ extension URLSession {
             // The proxy strips it before forwarding (hop-by-hop).
             request.setValue(authorization, forHTTPHeaderField: "Proxy-Authorization")
         }
-        let (bytes, response) = try await self.bytes(for: request, delegate: delegate)
-        guard response.expectedContentLength <= limit else { throw URLError(.dataLengthExceedsMaximum) }
-        var data = Data()
-        data.reserveCapacity(Int(max(0, response.expectedContentLength)))
-        for try await byte in bytes {
-            data.append(byte)
-            if data.count > limit { throw URLError(.dataLengthExceedsMaximum) }
+        let outgoing = request
+        // The request timeout is per idle interval, so a body trickled one byte
+        // at a time would otherwise hold the caller for as long as the sender likes.
+        // A timer child cancels the read, covering the response wait and stalled
+        // reads; the per-byte check makes an already-expired deadline deterministic.
+        let expiry = ContinuousClock.now.advanced(by: deadline)
+        return try await withThrowingTaskGroup(of: (Data, URLResponse).self) { group in
+            group.addTask {
+                let (bytes, response) = try await self.bytes(for: outgoing, delegate: delegate)
+                guard response.expectedContentLength <= limit else { throw URLError(.dataLengthExceedsMaximum) }
+                var data = Data()
+                data.reserveCapacity(Int(max(0, response.expectedContentLength)))
+                for try await byte in bytes {
+                    data.append(byte)
+                    if data.count > limit { throw URLError(.dataLengthExceedsMaximum) }
+                    if ContinuousClock.now >= expiry { throw URLError(.timedOut) }
+                }
+                return (data, response)
+            }
+            group.addTask {
+                try await Task.sleep(until: expiry, clock: .continuous)
+                throw URLError(.timedOut)
+            }
+            defer { group.cancelAll() }
+            guard let result = try await group.next() else { throw URLError(.timedOut) }
+            return result
         }
-        return (data, response)
     }
 }
 
@@ -154,7 +172,7 @@ private final class PublicRedirectPolicy: NSObject, URLSessionTaskDelegate, Send
 }
 
 @MainActor
-final class DownloadExecutor: ObservableObject {
+final class DownloadExecutor {
     private(set) var activeControllers: [UUID: DownloadProcessController] = [:]
     private(set) var activeTasks: [UUID: Task<Void, Never>] = [:]
     /// Attempts stopped while still unwinding. Retry can re-queue the job before
@@ -182,6 +200,29 @@ final class DownloadExecutor: ObservableObject {
 
     func hasActiveTask(for downloadID: UUID) -> Bool {
         activeTasks[downloadID] != nil
+    }
+
+    /// One activity assertion per running attempt keeps App Nap and idle system
+    /// sleep from throttling or suspending a download while the user is away.
+    private var activityTokens: [UUID: any NSObjectProtocol] = [:]
+
+    func hasActivityAssertion(for downloadID: UUID) -> Bool {
+        activityTokens[downloadID] != nil
+    }
+
+    func beginActivityAssertion(for downloadID: UUID) {
+        guard activityTokens[downloadID] == nil else { return }
+        activityTokens[downloadID] = ProcessInfo.processInfo.beginActivity(
+            options: [.userInitiated, .idleSystemSleepDisabled],
+            reason: "Siphon download in progress"
+        )
+    }
+
+    /// Idempotent, so every exit path may call it.
+    func endActivityAssertion(for downloadID: UUID) {
+        if let token = activityTokens.removeValue(forKey: downloadID) {
+            ProcessInfo.processInfo.endActivity(token)
+        }
     }
 
     private let ytdlpService: YtdlpService
@@ -267,7 +308,9 @@ final class DownloadExecutor: ObservableObject {
         }
         download.log.append(sanitized)
     }
+}
 
+extension DownloadExecutor {
     // MARK: - Download Execution
 
     func executeDownload(
@@ -280,7 +323,9 @@ final class DownloadExecutor: ObservableObject {
         defer { Signposts.end("Download attempt", signpost) }
         let downloadId = download.id
         let downloadCopy = download
+        beginActivityAssertion(for: downloadId)
         defer {
+            endActivityAssertion(for: downloadId)
             queue.releaseSlot(for: downloadId)
             activeTasks.removeValue(forKey: downloadId)
             activeControllers.removeValue(forKey: downloadId)
@@ -897,45 +942,6 @@ final class DownloadExecutor: ObservableObject {
     }
 
     // MARK: - Temporary Files Cleanup
-
-    nonisolated static func extractVideoId(from urlString: String) -> String? {
-        if let url = URL(string: urlString),
-           let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-            return components.queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
-        }
-        return nil
-    }
-
-    nonisolated static func isTemporaryFileName(_ fileName: String) -> Bool {
-        let lower = fileName.lowercased()
-        return lower.hasSuffix(".part") ||
-               lower.hasSuffix(".ytdl") ||
-               lower.hasSuffix(".temp") ||
-               lower.hasSuffix(".tmp")
-    }
-
-    nonisolated static func isMatchingTemporaryFile(
-        fileName: String,
-        rawBaseName: String,
-        sanitizedBaseName: String,
-        videoId _: String? = nil
-    ) -> Bool {
-        guard isTemporaryFileName(fileName) else { return false }
-
-        let trimmedRaw = rawBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedRaw.isEmpty,
-           fileName.hasPrefix("\(trimmedRaw).") || fileName == "\(trimmedRaw).part" || fileName == "\(trimmedRaw).ytdl" {
-            return true
-        }
-
-        let trimmedSanitized = sanitizedBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedSanitized.isEmpty,
-           fileName.hasPrefix("\(trimmedSanitized).") || fileName == "\(trimmedSanitized).part" || fileName == "\(trimmedSanitized).ytdl" {
-            return true
-        }
-
-        return false
-    }
 
     nonisolated static func shouldCleanupTemporaryFiles(for status: DownloadStatus) -> Bool {
         return status == .stopped || status == .failed

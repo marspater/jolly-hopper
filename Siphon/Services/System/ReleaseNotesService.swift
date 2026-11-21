@@ -182,11 +182,10 @@ final class ReleaseNotesService {
 
     struct WhatsNewCheckResult {
         let shouldShow: Bool
-        let title: String
         let features: [ReleaseFeature]
     }
 
-    func checkAndFetchWhatsNew(appVersion: String, languageService: LanguageService?, session: URLSession = .shared) async -> WhatsNewCheckResult? {
+    func checkAndFetchWhatsNew(appVersion: String, session: URLSession = .shared) async -> WhatsNewCheckResult? {
         let lastSeenVersion = userDefaults.string(forKey: UserDefaultsKeys.lastSeenVersion)
         let isFirstEverRun = (lastSeenVersion == nil || lastSeenVersion?.isEmpty == true || lastSeenVersion == "0.0.0")
         let isAppUpdated = (lastSeenVersion != nil && lastSeenVersion != appVersion && !isFirstEverRun)
@@ -195,7 +194,6 @@ final class ReleaseNotesService {
             return nil
         }
 
-        let title = languageService?.s("whats_new_title") ?? "What's New in Siphon"
         var features = Self.defaultFeatures
 
         if let releaseInfo = await fetchReleaseNotesFromGitHub(version: appVersion, session: session) {
@@ -206,6 +204,6 @@ final class ReleaseNotesService {
         }
 
         userDefaults.set(appVersion, forKey: UserDefaultsKeys.lastSeenVersion)
-        return WhatsNewCheckResult(shouldShow: true, title: title, features: features)
+        return WhatsNewCheckResult(shouldShow: true, features: features)
     }
 }

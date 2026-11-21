@@ -89,7 +89,7 @@ final class ReleaseNotesServiceTests: XCTestCase {
 
     func testCheckAndFetchWhatsNewFirstRun() async {
         let service = ReleaseNotesService(userDefaults: testDefaults)
-        let result = await service.checkAndFetchWhatsNew(appVersion: "5.3.0", languageService: nil)
+        let result = await service.checkAndFetchWhatsNew(appVersion: "5.3.0")
         XCTAssertNotNil(result)
         XCTAssertEqual(result?.shouldShow, true)
         XCTAssertEqual(testDefaults.string(forKey: UserDefaultsKeys.lastSeenVersion), "5.3.0")
@@ -98,7 +98,7 @@ final class ReleaseNotesServiceTests: XCTestCase {
     func testCheckAndFetchWhatsNewSameVersionDoesNotShow() async {
         testDefaults.set("5.3.0", forKey: UserDefaultsKeys.lastSeenVersion)
         let service = ReleaseNotesService(userDefaults: testDefaults)
-        let result = await service.checkAndFetchWhatsNew(appVersion: "5.3.0", languageService: nil)
+        let result = await service.checkAndFetchWhatsNew(appVersion: "5.3.0")
         XCTAssertNil(result)
     }
 }

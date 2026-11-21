@@ -56,6 +56,7 @@ final class PreferencesWindowManager: NSObject, NSWindowDelegate {
         window.title = languageService.s("settings")
         window.minSize = NSSize(width: 500, height: 670)
         window.contentViewController = hostingController
+        window.setFrameAutosaveName("SiphonPreferencesWindow")
         window.delegate = self
 
         let controller = NSWindowController(window: window)
