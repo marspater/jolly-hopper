@@ -287,4 +287,12 @@ final class QueueRecoveryStoreTests: XCTestCase {
         let permissions = (attrs[.posixPermissions] as? NSNumber)?.intValue ?? 0
         XCTAssertEqual(permissions & 0o777, 0o600, "Queue recovery snapshot file must have strict 0o600 permissions")
     }
+
+    func testOwnedOutputFilesCodecSurvivesCollidingKeys() throws {
+        // An existing directory named with and without a trailing slash is one URL.
+        let dir = tempDir.appendingPathComponent("out", isDirectory: true)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let decoded = Download.decodeOwnedOutputFiles([dir.path: 1, dir.path + "/": 2])
+        XCTAssertEqual(decoded.count, 1)
+    }
 }

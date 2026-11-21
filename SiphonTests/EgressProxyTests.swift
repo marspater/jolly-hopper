@@ -32,6 +32,15 @@ final class EgressProxyTests: XCTestCase {
         XCTAssertEqual(lookups.get(), 0)
     }
 
+    func testProxyClosesClientThatNeverFinishesItsRequestHeaders() async throws {
+        let proxy = EgressProxyServer(targetValidator: { _, _ in true }, addressResolver: { _ in ["127.0.0.1"] })
+        proxy.requestHeaderTimeout = 0.3
+        let port = try await proxy.start()
+        defer { proxy.stop() }
+        let response = try await sendThroughProxy(port: port, "GET http://example.com/ HTTP/1.1\r\nHost: example.com\r\n")
+        XCTAssertEqual(response, "")
+    }
+
     func testDefaultProxyResolvesOnceAndRejectsPrivateOrNonNumericResults() {
         let lookups = LockedValue(0)
         let proxy = EgressProxyServer(addressResolver: { _ in

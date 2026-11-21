@@ -21,6 +21,10 @@ final class DependencyUpdateCoordinator: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private let notificationService: NotificationService?
+    /// `isUpdating` mirrors the service one run-loop hop late, so a second
+    /// trigger in that window would reach the service, be refused as already in
+    /// progress, and show a false "update failed" while the first still runs.
+    private var updateInFlight = false
 
     init(notificationService: NotificationService? = .shared) {
         self.notificationService = notificationService
@@ -55,7 +59,9 @@ final class DependencyUpdateCoordinator: ObservableObject {
     }
 
     func updateYtdlp(service: YtdlpService, languageService: LanguageService? = nil) async {
-        guard !isUpdating else { return }
+        guard !isUpdating, !updateInFlight else { return }
+        updateInFlight = true
+        defer { updateInFlight = false }
         updateMessage = nil
         let lang = languageService ?? .shared
         let previousVersion = service.version

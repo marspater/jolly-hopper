@@ -4,6 +4,7 @@
 //
 
 import XCTest
+import Combine
 @testable import Siphon
 
 @MainActor
@@ -27,6 +28,28 @@ final class DependencyUpdateCoordinatorTests: XCTestCase {
 
         XCTAssertTrue(coordinator.isUpdating)
         XCTAssertEqual(coordinator.updateProgress, 0.75)
+    }
+
+    func testConcurrentUpdateTriggersRunOnceWithoutFalseFailure() async {
+        let coordinator = DependencyUpdateCoordinator(notificationService: nil)
+        let service = YtdlpService()
+        coordinator.bind(to: service)
+        service.updateYtdlpHandler = {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            return "2026.11.21"
+        }
+
+        var titles: [String] = []
+        let sub = coordinator.$updateMessage.sink { if let t = $0?.title { titles.append(t) } }
+        defer { sub.cancel() }
+
+        async let first: Void = coordinator.updateYtdlp(service: service)
+        async let second: Void = coordinator.updateYtdlp(service: service)
+        _ = await (first, second)
+
+        XCTAssertFalse(titles.contains(LanguageService.shared.s("ytdlp_update_failed_title")), "second trigger published a false failure")
+        XCTAssertEqual(coordinator.version, "2026.11.21")
+        XCTAssertEqual(coordinator.updateMessage?.title, LanguageService.shared.s("ytdlp_update_success_title"))
     }
 
     func testInitializeWithNonDefaultRunner() async {

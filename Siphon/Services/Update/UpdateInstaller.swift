@@ -232,8 +232,9 @@ public final class UpdateInstaller: Sendable {
             let name = entry.lastPathComponent
             guard name.hasPrefix(prefix), name.hasSuffix(".app"),
                   UUID(uuidString: String(name.dropFirst(prefix.count).dropLast(4))) != nil else { continue }
-            let values = try entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .contentModificationDateKey])
-            guard values.isDirectory == true, values.isSymbolicLink != true,
+            // One unreadable sibling must not stop the rest from being pruned.
+            guard let values = try? entry.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .contentModificationDateKey]),
+                  values.isDirectory == true, values.isSymbolicLink != true,
                   entry.standardizedFileURL != appURL.standardizedFileURL,
                   Bundle(url: entry)?.bundleIdentifier == identifier else { continue }
             backups.append((entry, values.contentModificationDate ?? .distantPast))
@@ -243,7 +244,11 @@ public final class UpdateInstaller: Sendable {
             return $0.url.lastPathComponent < $1.url.lastPathComponent
         }
         for backup in backups.dropFirst() {
-            try fileManager.removeItem(at: backup.url)
+            do {
+                try fileManager.removeItem(at: backup.url)
+            } catch {
+                log("Updater could not remove old backup \(backup.url.lastPathComponent): \(error.localizedDescription)", level: .warning)
+            }
         }
     }
 

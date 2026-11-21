@@ -27,7 +27,7 @@ struct DependencyChecksums {
     static let ytdlpURL = ytdlpBuildURL()
     static let ytdlpExecutableSHA256 = "2302a14adb93fe7ae8b36a2160f8b6e0c0205845d82238b156f10737fb049774"
 
-    /// FFmpeg/FFprobe 9.0.2 release builds by Martin Riedl (ffmpeg.martin-riedl.de),
+    /// FFmpeg/FFprobe 9.1 release builds by Martin Riedl (ffmpeg.martin-riedl.de),
     /// static, GPL, signed with Developer ID KU3N25YGLU. Versioned URLs never
     /// change. To bump, take the new release's per-architecture ZIP URLs, check
     /// the archive SHA-256 against the published `.sha256` files, and pin the
@@ -41,21 +41,21 @@ struct DependencyChecksums {
     }
 
     #if arch(arm64)
-    static let ffmpegURL = ffmpegBuildURL(architecture: "arm64", build: "1789931890_9.0.2", tool: "ffmpeg")
-    static let ffmpegArchiveSHA256 = "c8ed4c4e6978a03c485edbfe4e0a5dc2380f8a30bba5150531b31b094492d924"
-    static let ffmpegExecutableSHA256 = "2e11c6f90993cdb79fff84d3f90044d28316b310e75b3e030cfc9a54f2c9d384"
+    static let ffmpegURL = ffmpegBuildURL(architecture: "arm64", build: "1795207104_9.1", tool: "ffmpeg")
+    static let ffmpegArchiveSHA256 = "1f66e9a690a7f1c9e60b012379f8869c11818d1797f45b21dbb2f2564ba61ae1"
+    static let ffmpegExecutableSHA256 = "bc18dd239c4e699e080f0d92d3707004a160da54e12f8d4946e4145080143d40"
 
-    static let ffprobeURL = ffmpegBuildURL(architecture: "arm64", build: "1789931890_9.0.2", tool: "ffprobe")
-    static let ffprobeArchiveSHA256 = "fcbe839537485eaee7a7a8bc5cbc0f90d53617e80943e8a5b2e31cb851197ea6"
-    static let ffprobeExecutableSHA256 = "2738aa46a7f9acbc8ab09a6715554c90f7de603171ac403726765685df6a0059"
+    static let ffprobeURL = ffmpegBuildURL(architecture: "arm64", build: "1795207104_9.1", tool: "ffprobe")
+    static let ffprobeArchiveSHA256 = "6ef2df5f575042923a28537ab37adf936f28bf3e7b85de23a1447ed447ec1dbd"
+    static let ffprobeExecutableSHA256 = "9f0f5582b5d59c26279309b71fa8d7e2cec23910a2dfb0212e6724f2e18a521d"
     #else
-    static let ffmpegURL = ffmpegBuildURL(architecture: "amd64", build: "1789931006_9.0.2", tool: "ffmpeg")
-    static let ffmpegArchiveSHA256 = "7c6b4125b191cbf773832dc51f424cf2b6bb7da43007d1e066f95909e47cacd4"
-    static let ffmpegExecutableSHA256 = "b25689cf2211c0582d317e849912769a1f1c93904fe102c485b5364a425633d1"
+    static let ffmpegURL = ffmpegBuildURL(architecture: "amd64", build: "1795212433_9.1", tool: "ffmpeg")
+    static let ffmpegArchiveSHA256 = "35b3d82cccc2c1d644d49d15f5e57eb913a08ef68f798042c90eecec62c51f1e"
+    static let ffmpegExecutableSHA256 = "1d6e304464619a50c36dfc9a6a2f08bc124cef7f7901fa66158b9d5df1da9be2"
 
-    static let ffprobeURL = ffmpegBuildURL(architecture: "amd64", build: "1789931006_9.0.2", tool: "ffprobe")
-    static let ffprobeArchiveSHA256 = "2322438ed2f6319a691291b247d09c69dcaa3a982460d1f269a7e1af335cfdfd"
-    static let ffprobeExecutableSHA256 = "b5df9964b0c2048318fafedcd4e3bbafbc561033cee77de8da1840685d8a9d0d"
+    static let ffprobeURL = ffmpegBuildURL(architecture: "amd64", build: "1795212433_9.1", tool: "ffprobe")
+    static let ffprobeArchiveSHA256 = "41ca7b7cba7992e33f1da3f1bf54db8ec103a4d387b1bfac3162062e8b1074ad"
+    static let ffprobeExecutableSHA256 = "08628babfba2b69c83f5071586d75207feb698594304e4bee0c5c134a258f1d1"
     #endif
 }
 
@@ -1324,7 +1324,7 @@ class YtdlpService: ObservableObject {
                 let format = MediaFormat(
                     formatId: quality,
                     ext: "mp4",
-                    resolution: "\(Int(Double(height) * 16.0 / 9.0))x\(height)",
+                    resolution: Self.assumedWidescreenResolution(height: height),
                     fps: 30.0,
                     vcodec: "h264",
                     acodec: "aac",
@@ -1354,7 +1354,7 @@ class YtdlpService: ObservableObject {
                 let format = MediaFormat(
                     formatId: quality,
                     ext: "mp4",
-                    resolution: "\(Int(Double(height) * 16.0 / 9.0))x\(height)",
+                    resolution: Self.assumedWidescreenResolution(height: height),
                     fps: 30.0,
                     vcodec: "h264",
                     acodec: "aac",
@@ -1388,7 +1388,7 @@ class YtdlpService: ObservableObject {
                     return MediaFormat(
                         formatId: quality,
                         ext: "mp4",
-                        resolution: "\(Int(Double(height) * 16.0 / 9.0))x\(height)",
+                        resolution: Self.assumedWidescreenResolution(height: height),
                         fps: 30.0,
                         vcodec: src.codec.isEmpty ? "h264" : src.codec,
                         acodec: "aac",
@@ -1893,6 +1893,12 @@ public struct DownloadResult: Sendable {
         return nil
     }
 
+    /// Heights come from page text; a huge one must not trap the Int conversion.
+    nonisolated static func assumedWidescreenResolution(height: Int) -> String {
+        let clamped = min(max(height, 0), 16_384)
+        return "\(clamped * 16 / 9)x\(clamped)"
+    }
+
     private static func protectedSiteFormats(
         from sources: [(label: String, url: String, height: Int)]
     ) -> [MediaFormat] {
@@ -1900,7 +1906,7 @@ public struct DownloadResult: Sendable {
             MediaFormat(
                 formatId: source.label,
                 ext: "mp4",
-                resolution: "\(Int(Double(source.height) * 16.0 / 9.0))x\(source.height)",
+                resolution: Self.assumedWidescreenResolution(height: source.height),
                 fps: 30.0,
                 vcodec: "h264",
                 acodec: "aac",
@@ -2169,6 +2175,14 @@ public struct DownloadResult: Sendable {
             LoggerService.shared.log("Failed to create temporary scratch directory at \(scratchDirectory.path): \(error.localizedDescription)", level: .error)
             throw YtdlpError.downloadFailed("Failed to initialize temporary scratch directory: \(error.localizedDescription)")
         }
+        // Registered before any later throw (argument parsing, cookie files) so none leaks it.
+        defer {
+            // Executor-owned directories survive a pause and are cleaned at job teardown.
+            if temporaryDirectory == nil {
+                do { try FileManager.default.removeItem(at: scratchDirectory) }
+                catch { LoggerService.shared.log("Could not remove download scratch directory: \(error.localizedDescription)", level: .warning) }
+            }
+        }
         args.append(contentsOf: ["--paths", "home:\(options.saveFolder.path)"])
         args.append(contentsOf: ["--paths", "temp:\(scratchDirectory.path)"])
         let thumbnailDirectory = options.downloadThumbnail ? options.saveFolder : scratchDirectory
@@ -2327,11 +2341,6 @@ public struct DownloadResult: Sendable {
             }
             if let infoJSONFile {
                 try? FileManager.default.removeItem(at: infoJSONFile)
-            }
-            // Executor-owned directories survive a pause and are cleaned at job teardown.
-            if temporaryDirectory == nil {
-                do { try FileManager.default.removeItem(at: scratchDirectory) }
-                catch { LoggerService.shared.log("Could not remove download scratch directory: \(error.localizedDescription)", level: .warning) }
             }
         }
 
