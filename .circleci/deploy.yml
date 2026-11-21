@@ -17,7 +17,7 @@ parameters:
 executors:
   node-executor:
     docker:
-      - image: cimg/node:24.0
+      - image: cimg/node:26.13.1
     resource_class: medium
 
 jobs:
