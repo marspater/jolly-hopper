@@ -80,10 +80,6 @@ public struct RenderingCapabilities: Sendable, Equatable {
     public let increaseContrast: Bool
     public let maxRefreshRate: Int
 
-    public var isHighRefreshRate: Bool {
-        maxRefreshRate >= 120
-    }
-
     /// Siphon renders custom frame-scheduled animation at a 60 Hz baseline,
     /// stepping up to 120 Hz on displays that can actually present it.
     /// Physics timings remain identical across refresh rates.
@@ -119,17 +115,6 @@ public final class AdaptiveRenderingEnvironment {
 
     public private(set) var capabilities: RenderingCapabilities
 
-    public var reduceMotion: Bool {
-        capabilities.reduceMotion
-    }
-
-    public var isHighRefreshRate: Bool {
-        capabilities.isHighRefreshRate
-    }
-
-    public var maxRefreshRate: Int {
-        capabilities.maxRefreshRate
-    }
     public var isAppActive: Bool = true
 
     public var shouldAnimateAmbient: Bool {
@@ -527,10 +512,6 @@ public enum SiphonTheme {
         Color(nsColor: .separatorColor)
     }
 
-    public static var selection: Color {
-        Color(nsColor: .selectedContentBackgroundColor)
-    }
-
     /// Translucent lift for cards, pills and controls inside a window. Only the
     /// window root and floating bars carry a blur material; nested surfaces use
     /// this fill so the compositor samples the backdrop once.
@@ -905,8 +886,6 @@ public struct SiphonInteractiveGlassBackground: View {
     public var isHovered: Bool
     public var isSelected: Bool
     public var effectiveTint: Color
-
-    @Environment(\.siphonRenderingCapabilities) private var renderingCapabilities
 
     public init(
         cornerRadius: CGFloat = SiphonTheme.radiusControl,
@@ -1306,20 +1285,13 @@ extension ButtonStyle where Self == SiphonPrimaryButtonStyle {
 
 extension ButtonStyle where Self == SiphonSecondaryButtonStyle {
     public static var siphonSecondary: SiphonSecondaryButtonStyle { SiphonSecondaryButtonStyle() }
-    public static func siphonSecondary(cornerRadius: CGFloat = SiphonTheme.radiusControl) -> SiphonSecondaryButtonStyle {
-        SiphonSecondaryButtonStyle(cornerRadius: cornerRadius)
-    }
 }
 
 extension ButtonStyle where Self == SiphonGhostButtonStyle {
     public static var siphonGhost: SiphonGhostButtonStyle { SiphonGhostButtonStyle() }
-    public static func siphonGhost(cornerRadius: CGFloat = SiphonTheme.radiusControl) -> SiphonGhostButtonStyle {
-        SiphonGhostButtonStyle(cornerRadius: cornerRadius)
-    }
 }
 
 extension ButtonStyle where Self == SiphonIconButtonStyle {
-    public static var siphonIcon: SiphonIconButtonStyle { SiphonIconButtonStyle() }
     public static func siphonIcon(size: CGFloat = 26) -> SiphonIconButtonStyle {
         SiphonIconButtonStyle(size: size)
     }

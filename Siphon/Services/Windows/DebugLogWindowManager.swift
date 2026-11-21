@@ -47,11 +47,6 @@ final class DebugLogWindowManager: NSObject, NSWindowDelegate {
         NSApp.bringToFront()
     }
 
-    func closeWindow() {
-        windowController?.window?.close()
-        windowController = nil
-    }
-
     func windowWillClose(_ _: Notification) {
         windowController = nil
     }

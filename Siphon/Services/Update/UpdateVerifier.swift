@@ -205,7 +205,6 @@ public struct UpdateVerifier: Sendable {
 
 public enum ManifestVerificationError: LocalizedError, Sendable {
     case invalidSignature
-    case invalidPublicKey
     case versionMismatch(expected: String, actual: String)
     case assetNotFound(String)
     case invalidChecksum(String)
@@ -217,8 +216,6 @@ public enum ManifestVerificationError: LocalizedError, Sendable {
         switch self {
         case .invalidSignature:
             return LanguageService.s("update_err_manifest_signature")
-        case .invalidPublicKey:
-            return LanguageService.s("update_err_manifest_key")
         case .versionMismatch(let expected, let actual):
             return String(format: LanguageService.s("update_err_manifest_version"), actual, expected)
         case .assetNotFound(let asset):
@@ -295,17 +292,6 @@ public struct UpdateManifestVerifier: Sendable {
 
     public init(publicKey: Curve25519.Signing.PublicKey = defaultPublicKey) {
         self.publicKey = publicKey
-    }
-
-    public init(publicKeyBase64: String) throws {
-        guard let data = Data(base64Encoded: publicKeyBase64.trimmingCharacters(in: .whitespacesAndNewlines)) else {
-            throw ManifestVerificationError.invalidPublicKey
-        }
-        do {
-            self.publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: data)
-        } catch {
-            throw ManifestVerificationError.invalidPublicKey
-        }
     }
 
     public static func parseSignatureData(_ signatureData: Data) throws -> Data {

@@ -34,7 +34,7 @@ final class DownloadQueueTests: XCTestCase {
             queue.planUniqueOutputPath(for: Download(url: url, options: options, title: title)).resolvedBaseName
         }
         let first = planned("https://www.boyfriendtv.com/videos/1634352/-/")
-        XCTAssertNotNil(YtdlpService.sanitizedFilenameOrNil(first))
+        XCTAssertNotNil(MediaFileRules.sanitizedFilenameOrNil(first))
         XCTAssertNotEqual(first, planned("https://www.boyfriendtv.com/videos/1734715/-/"))
         XCTAssertEqual(first, planned("https://www.boyfriendtv.com/es/videos/1634352/-/?tag=x"))
         XCTAssertNotEqual(planned("https://www.boyfriendtv.com/?id=1634352"), planned("https://www.boyfriendtv.com/?id=1734715"))
@@ -79,7 +79,7 @@ final class DownloadQueueTests: XCTestCase {
 
         var videoOptions = DownloadOptions.default
         videoOptions.fileType = .mp4
-        for ext in YtdlpService.videoMediaExtensions {
+        for ext in MediaFileRules.videoMediaExtensions {
             XCTAssertTrue(
                 DownloadQueue.mediaFileCollides(baseName: "My Video", options: videoOptions, existingMediaFileKeys: ["my video.\(ext)"]),
                 "An existing .\(ext) must block a video job of the same name"

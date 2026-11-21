@@ -927,45 +927,6 @@ final class DownloadExecutor {
 
     // MARK: - Temporary Files Cleanup
 
-    nonisolated static func extractVideoId(from urlString: String) -> String? {
-        if let url = URL(string: urlString),
-           let components = URLComponents(url: url, resolvingAgainstBaseURL: false) {
-            return components.queryItems?.first(where: { $0.name == "v" })?.value ?? url.lastPathComponent
-        }
-        return nil
-    }
-
-    nonisolated static func isTemporaryFileName(_ fileName: String) -> Bool {
-        let lower = fileName.lowercased()
-        return lower.hasSuffix(".part") ||
-               lower.hasSuffix(".ytdl") ||
-               lower.hasSuffix(".temp") ||
-               lower.hasSuffix(".tmp")
-    }
-
-    nonisolated static func isMatchingTemporaryFile(
-        fileName: String,
-        rawBaseName: String,
-        sanitizedBaseName: String,
-        videoId _: String? = nil
-    ) -> Bool {
-        guard isTemporaryFileName(fileName) else { return false }
-
-        let trimmedRaw = rawBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedRaw.isEmpty,
-           fileName.hasPrefix("\(trimmedRaw).") || fileName == "\(trimmedRaw).part" || fileName == "\(trimmedRaw).ytdl" {
-            return true
-        }
-
-        let trimmedSanitized = sanitizedBaseName.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedSanitized.isEmpty,
-           fileName.hasPrefix("\(trimmedSanitized).") || fileName == "\(trimmedSanitized).part" || fileName == "\(trimmedSanitized).ytdl" {
-            return true
-        }
-
-        return false
-    }
-
     nonisolated static func shouldCleanupTemporaryFiles(for status: DownloadStatus) -> Bool {
         return status == .stopped || status == .failed
     }

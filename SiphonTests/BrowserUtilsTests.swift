@@ -41,10 +41,6 @@ struct BrowserUtilsTests {
         #expect(chromiumBased.displayName == "Chromium-based")
         #expect(chromiumBased.bundleIdentifier == "net.imput.helium")
         #expect(SupportedBrowser.allCases.contains(.chromiumBased))
-
-        // Backward compatibility alias
-        let helium = SupportedBrowser.helium
-        #expect(helium == .chromiumBased)
     }
 }
 

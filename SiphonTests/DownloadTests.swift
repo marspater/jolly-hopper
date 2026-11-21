@@ -176,25 +176,6 @@ final class DownloadTests: XCTestCase {
             let decoded = try decoder.decode(DownloadStatus.self, from: data)
             XCTAssertEqual(decoded, status)
         }
-
-        // Test legacy Turkish decoding
-        let turkishMap: [String: DownloadStatus] = [
-            "\"Bilgi Alınıyor\"": .fetching,
-            "\"Kuyrukta\"": .queued,
-            "\"İndiriliyor\"": .downloading,
-            "\"İşleniyor\"": .processing,
-            "\"Tamamlandı\"": .completed,
-            "\"Hata\"": .failed,
-            "\"Durduruldu\"": .stopped,
-            "\"Duraklatıldı\"": .paused,
-            "\"Dosya Mevcut\"": .fileExists
-        ]
-
-        for (jsonString, expectedStatus) in turkishMap {
-            let data = jsonString.data(using: .utf8)!
-            let status = try decoder.decode(DownloadStatus.self, from: data)
-            XCTAssertEqual(status, expectedStatus)
-        }
     }
 
     func testHDROptionProperties() {

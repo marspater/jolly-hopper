@@ -30,13 +30,20 @@ final class DownloadQueueTests: XCTestCase {
         options.saveFolder = folder
         let job = Download(url: "https://example.com/video", options: options, title: "Clip")
         let queue = DownloadQueue(userDefaults: testDefaults)
-        let first = queue.reserveUniqueOutputPath(for: job)
+        // Mirrors DownloadExecutor: plan, record the resolved name, reserve the path.
+        func reserve(_ download: Download, forceIncrement: Bool = false) -> (resolvedBaseName: String, candidatePath: String) {
+            let planned = queue.planUniqueOutputPath(for: download, forceIncrement: forceIncrement)
+            download.resolvedOutputBaseName = planned.resolvedBaseName
+            queue.reserveOutputPath(planned.candidatePath)
+            return planned
+        }
+        let first = reserve(job)
         XCTAssertNil(job.options.customFilename)
         queue.unreserveOutputPath(first.candidatePath)
-        let second = queue.reserveUniqueOutputPath(for: job, forceIncrement: true)
+        let second = reserve(job, forceIncrement: true)
         XCTAssertEqual(second.resolvedBaseName, "Clip (1)")
         queue.unreserveOutputPath(second.candidatePath)
-        let third = queue.reserveUniqueOutputPath(for: job, forceIncrement: true)
+        let third = reserve(job, forceIncrement: true)
         XCTAssertEqual(third.resolvedBaseName, "Clip (2)")
         queue.unreserveOutputPath(third.candidatePath)
         XCTAssertNil(job.options.customFilename)
@@ -53,17 +60,17 @@ final class DownloadQueueTests: XCTestCase {
         XCTAssertEqual(queue.planUniqueOutputPath(for: job, forceIncrement: true).resolvedBaseName, "Clip (\(Int.max))")
         let fetching = Download(url: "https://example.com/video", options: options)
         fetching.title = Download.fetchingPlaceholder
-        let reserved = queue.reserveUniqueOutputPath(for: fetching)
+        let reserved = queue.planUniqueOutputPath(for: fetching)
+        queue.reserveOutputPath(reserved.candidatePath)
         XCTAssertFalse(reserved.resolvedBaseName.contains(Download.fetchingPlaceholder))
         XCTAssertNil(fetching.options.customFilename)
-        XCTAssertNil(fetching.resolvedOutputBaseName)
         queue.unreserveOutputPath(reserved.candidatePath)
         fetching.title = "Actual title"
         XCTAssertEqual(queue.planUniqueOutputPath(for: fetching).resolvedBaseName, "Actual title")
         // A literal custom name's suffix remains part of the user's base name.
         options.customFilename = "Custom (1)"
         let custom = Download(url: "https://example.com/v", options: options, title: "Title")
-        XCTAssertEqual(queue.reserveUniqueOutputPath(for: custom, forceIncrement: true).resolvedBaseName, "Custom (1) (1)")
+        XCTAssertEqual(reserve(custom, forceIncrement: true).resolvedBaseName, "Custom (1) (1)")
         XCTAssertEqual(custom.options.customFilename, "Custom (1)")
     }
 
@@ -141,7 +148,8 @@ final class DownloadQueueTests: XCTestCase {
         XCTAssertEqual(path1, tempDir.appendingPathComponent("Sample Video.mp4").path)
 
         // Reserve path1
-        let (resName, resPath) = queue.reserveUniqueOutputPath(for: dl1)
+        let (resName, resPath) = queue.planUniqueOutputPath(for: dl1)
+        queue.reserveOutputPath(resPath)
         XCTAssertEqual(resName, "Sample Video")
         XCTAssertEqual(resPath, path1)
         XCTAssertTrue(queue.isPathReserved(path1))

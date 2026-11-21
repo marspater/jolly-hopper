@@ -99,8 +99,6 @@ struct PreferencesView: View {
         self.userDefaults = userDefaults
     }
 
-    @Environment(\.dismiss) var dismiss
-
     var body: some View {
         VStack(spacing: 0) {
             SiphonSegmentedPicker(

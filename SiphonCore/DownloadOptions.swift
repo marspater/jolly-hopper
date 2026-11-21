@@ -101,7 +101,7 @@ public struct DownloadOptions: Codable, Sendable {
         self.enforcePublicNetworkBoundary = try container.decodeIfPresent(Bool.self, forKey: .enforcePublicNetworkBoundary) ?? false
     }
 
-    public static var defaultOptions: DownloadOptions {
+    public static var `default`: DownloadOptions { // NOSONAR
         let saveFolderURL: URL
         if ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil || NSClassFromString("XCTestCase") != nil {
             let testDir = FileManager.default.temporaryDirectory.appendingPathComponent("SiphonTestDownloads", isDirectory: true)
@@ -127,16 +127,6 @@ public struct DownloadOptions: Codable, Sendable {
         options.browserCookieSource = nil
         options.selectedFormatId = nil
         return options
-    }
-
-    @inlinable
-    public static var standard: DownloadOptions {
-        defaultOptions
-    }
-
-    @inlinable
-    public static var `default`: DownloadOptions { // NOSONAR
-        defaultOptions
     }
 
     /// The parts of a custom preset that Preferences does not mirror into its

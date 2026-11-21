@@ -368,10 +368,11 @@ final class DownloadManagerTests: XCTestCase {
         let expectedPath2 = opts2.saveFolder.appendingPathComponent("custom_video (1).mp4").path
 
         // Reserve path for dl1 through DownloadManager
-        let (name1, path1) = manager.reserveUniqueOutputPath(for: dl1)
+        let (name1, path1) = manager.queue.planUniqueOutputPath(for: dl1)
+        manager.queue.reserveOutputPath(path1)
         XCTAssertEqual(name1, "custom_video")
         XCTAssertEqual(path1, expectedPath1)
-        defer { manager.unreserveOutputPath(path1) }
+        defer { manager.queue.unreserveOutputPath(path1) }
 
         // Act: Resolve unique output path for dl2 using real production DownloadManager logic
         let (name2, path2) = manager.planUniqueOutputPath(for: dl2)
@@ -402,9 +403,10 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(path1, path2)
 
         // Now actively reserve it
-        let (resName, resPath) = manager.reserveUniqueOutputPath(for: dl)
+        let (resName, resPath) = manager.queue.planUniqueOutputPath(for: dl)
+        manager.queue.reserveOutputPath(resPath)
         XCTAssertEqual(resName, "unreserved_test")
-        defer { manager.unreserveOutputPath(resPath) }
+        defer { manager.queue.unreserveOutputPath(resPath) }
 
         // Now plan will see the active reservation and increment
         let (name3, path3) = manager.planUniqueOutputPath(for: dl)
@@ -550,42 +552,20 @@ final class DownloadManagerTests: XCTestCase {
         XCTAssertEqual(manager.downloads.count, 2)
     }
 
-    func testDownloadStatusLegacyAndCanonicalDecoding() throws {
+    func testDownloadStatusCanonicalDecoding() throws {
         let decoder = JSONDecoder()
 
-        // Modern English canonical keys
         let modernJSON = "\"downloading\"".data(using: .utf8)!
         let modernStatus = try decoder.decode(DownloadStatus.self, from: modernJSON)
         XCTAssertEqual(modernStatus, .downloading)
-
-        // Legacy Turkish serialized keys
-        let legacyMap: [String: DownloadStatus] = [
-            "\"Bilgi Alınıyor\"": .fetching,
-            "\"Kuyrukta\"": .queued,
-            "\"İndiriliyor\"": .downloading,
-            "\"İşleniyor\"": .processing,
-            "\"Tamamlandı\"": .completed,
-            "\"Hata\"": .failed,
-            "\"Durduruldu\"": .stopped,
-            "\"Duraklatıldı\"": .paused,
-            "\"Dosya Mevcut\"": .fileExists
-        ]
-
-        for (legacyJSON, expectedStatus) in legacyMap {
-            let data = legacyJSON.data(using: .utf8)!
-            let status = try decoder.decode(DownloadStatus.self, from: data)
-            XCTAssertEqual(status, expectedStatus, "Legacy Turkish string \(legacyJSON) must decode to \(expectedStatus)")
-        }
     }
 
     func testDownloadProcessResultPathValidation() {
         let emptyResult = DownloadProcessResult(primaryPath: "   ", allPaths: ["  ", "\n"])
-        XCTAssertTrue(emptyResult.isEmpty)
-        XCTAssertEqual(emptyResult.count, 0)
+        XCTAssertEqual(emptyResult.primaryPath, "")
+        XCTAssertTrue(emptyResult.allPaths.isEmpty)
 
         let validResult = DownloadProcessResult(primaryPath: "/path/to/video.mp4")
-        XCTAssertFalse(validResult.isEmpty)
-        XCTAssertEqual(validResult.count, 1)
         XCTAssertEqual(validResult.primaryPath, "/path/to/video.mp4")
         XCTAssertEqual(validResult.allPaths, ["/path/to/video.mp4"])
     }
@@ -839,107 +819,21 @@ final class DownloadManagerTests: XCTestCase {
     }
 
     func testShouldCleanupTemporaryFiles() {
-        XCTAssertTrue(DownloadManager.shouldCleanupTemporaryFiles(for: .stopped))
-        XCTAssertTrue(DownloadManager.shouldCleanupTemporaryFiles(for: .failed))
+        XCTAssertTrue(DownloadExecutor.shouldCleanupTemporaryFiles(for: .stopped))
+        XCTAssertTrue(DownloadExecutor.shouldCleanupTemporaryFiles(for: .failed))
 
-        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .queued))
-        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .downloading))
-        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .completed))
-        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .fetching))
-        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .processing))
-        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .paused))
-        XCTAssertFalse(DownloadManager.shouldCleanupTemporaryFiles(for: .fileExists))
-    }
-
-    func testExtractVideoId() {
-        XCTAssertEqual(
-            DownloadManager.extractVideoId(from: "https://www.youtube.com/watch?v=dQw4w9WgXcQ"),
-            "dQw4w9WgXcQ"
-        )
-        XCTAssertEqual(
-            DownloadManager.extractVideoId(from: "https://youtu.be/dQw4w9WgXcQ"),
-            "dQw4w9WgXcQ"
-        )
-        XCTAssertEqual(
-            DownloadManager.extractVideoId(from: "invalid_url"),
-            "invalid_url"
-        )
-    }
-
-    func testIsTemporaryFileName() {
-        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.mp4.part"))
-        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.mp4.ytdl"))
-        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.mp4.temp"))
-        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.mp4.tmp"))
-        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.f137.part"))
-        XCTAssertTrue(DownloadManager.isTemporaryFileName("video.f140.ytdl"))
-
-        XCTAssertFalse(DownloadManager.isTemporaryFileName("video.mp4"))
-        XCTAssertFalse(DownloadManager.isTemporaryFileName("video.m4a"))
-        XCTAssertFalse(DownloadManager.isTemporaryFileName("video.part.mp4"))
-    }
-
-    func testIsMatchingTemporaryFile() {
-        let rawBaseName = "My Great Video"
-        let sanitizedBaseName = "My_Great_Video"
-        let videoId = "dQw4w9WgXcQ"
-
-        // Matches prefix (raw base name) and temp extension
-        XCTAssertTrue(
-            DownloadManager.isMatchingTemporaryFile(
-                fileName: "My Great Video.f137.part",
-                rawBaseName: rawBaseName,
-                sanitizedBaseName: sanitizedBaseName,
-                videoId: videoId
-            )
-        )
-
-        // Matches prefix (sanitized base name) and temp extension
-        XCTAssertTrue(
-            DownloadManager.isMatchingTemporaryFile(
-                fileName: "My_Great_Video.f140.ytdl",
-                rawBaseName: rawBaseName,
-                sanitizedBaseName: sanitizedBaseName,
-                videoId: videoId
-            )
-        )
-
-        // Unrelated file with video ID must NOT match
-        XCTAssertFalse(
-            DownloadManager.isMatchingTemporaryFile(
-                fileName: "some_other_title_dQw4w9WgXcQ.temp",
-                rawBaseName: rawBaseName,
-                sanitizedBaseName: sanitizedBaseName,
-                videoId: videoId
-            ),
-            "Must not match unrelated file with videoId substring"
-        )
-
-        // Does not match prefix or video ID
-        XCTAssertFalse(
-            DownloadManager.isMatchingTemporaryFile(
-                fileName: "Unrelated_Video.part",
-                rawBaseName: rawBaseName,
-                sanitizedBaseName: sanitizedBaseName,
-                videoId: videoId
-            )
-        )
-
-        // Matches prefix but is NOT a temporary file
-        XCTAssertFalse(
-            DownloadManager.isMatchingTemporaryFile(
-                fileName: "My_Great_Video.mp4",
-                rawBaseName: rawBaseName,
-                sanitizedBaseName: sanitizedBaseName,
-                videoId: videoId
-            )
-        )
+        XCTAssertFalse(DownloadExecutor.shouldCleanupTemporaryFiles(for: .queued))
+        XCTAssertFalse(DownloadExecutor.shouldCleanupTemporaryFiles(for: .downloading))
+        XCTAssertFalse(DownloadExecutor.shouldCleanupTemporaryFiles(for: .completed))
+        XCTAssertFalse(DownloadExecutor.shouldCleanupTemporaryFiles(for: .fetching))
+        XCTAssertFalse(DownloadExecutor.shouldCleanupTemporaryFiles(for: .processing))
+        XCTAssertFalse(DownloadExecutor.shouldCleanupTemporaryFiles(for: .paused))
+        XCTAssertFalse(DownloadExecutor.shouldCleanupTemporaryFiles(for: .fileExists))
     }
 
     func testInitializeVersionFetchingAndAssignment() async {
         let manager = DownloadManager.forTesting()
         let appState = AppState.forTesting()
-        let languageService = LanguageService()
         let lastSeenKey = UserDefaultsKeys.lastSeenVersion
         let previousLastSeen = TestState.defaults.string(forKey: lastSeenKey)
         defer {
@@ -958,8 +852,7 @@ final class DownloadManagerTests: XCTestCase {
         })
 
         await appState.initializeApplicationServices(
-            ytdlpService: manager.ytdlpService,
-            languageService: languageService
+            ytdlpService: manager.ytdlpService
         )
 
         XCTAssertEqual(appState.ytdlpVersion, expectedVersion)
@@ -992,7 +885,6 @@ final class DownloadManagerTests: XCTestCase {
     func testInitializeWhatsNewDisplayWhenVersionChanges() async {
         let manager = DownloadManager.forTesting()
         let appState = AppState.forTesting()
-        let languageService = LanguageService()
         appState.urlSession = makeMockURLSession()
 
         let lastSeenKey = UserDefaultsKeys.lastSeenVersion
@@ -1010,7 +902,6 @@ final class DownloadManagerTests: XCTestCase {
 
         await appState.initializeApplicationServices(
             ytdlpService: manager.ytdlpService,
-            languageService: languageService,
             skipBinarySetup: true
         )
 
@@ -1021,7 +912,6 @@ final class DownloadManagerTests: XCTestCase {
         appState2.urlSession = makeMockURLSession()
         await appState2.initializeApplicationServices(
             ytdlpService: manager.ytdlpService,
-            languageService: languageService,
             skipBinarySetup: true
         )
         XCTAssertFalse(appState2.showWhatsNew)

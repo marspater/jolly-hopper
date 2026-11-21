@@ -38,7 +38,6 @@ struct DownloadListView: View {
     let emptyMessage: String
     let emptyDetail: String
     var emptyIcon: String = "tray.fill"
-    let showStop: Bool
 
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService
@@ -57,7 +56,7 @@ struct DownloadListView: View {
                     LazyVStack(spacing: SiphonTheme.spacing12) {
                         header
                         ForEach(downloads) { download in
-                            DownloadRowView(download: download, showStop: showStop)
+                            DownloadRowView(download: download)
                         }
                     }
                     .padding(.horizontal, SiphonTheme.spacing24)
@@ -119,7 +118,6 @@ struct DownloadRowView: View {
     @EnvironmentObject var languageService: LanguageService
     @EnvironmentObject var updateChecker: UpdateChecker
     @Environment(\.colorScheme) private var colorScheme
-    let showStop: Bool
 
     @State private var isHovering = false
     @State private var showLog = false
@@ -1517,7 +1515,7 @@ enum ThumbnailCache {
         VStack(alignment: .leading, spacing: 8) {
             ForEach(PreviewFixtures.lifecycle, id: \.0) { label, download in
                 Text(label).font(.siphonMetadataMedium)
-                DownloadRowView(download: download, showStop: true)
+                DownloadRowView(download: download)
             }
         }
         .padding()
@@ -1527,12 +1525,12 @@ enum ThumbnailCache {
 }
 
 #Preview("List, empty") {
-    DownloadListView(downloads: [], emptyMessage: "Nothing here", emptyDetail: "Add a link to begin", showStop: true)
+    DownloadListView(downloads: [], emptyMessage: "Nothing here", emptyDetail: "Add a link to begin")
         .previewEnvironment()
 }
 
 #Preview("List, populated, dark") {
-    DownloadListView(downloads: PreviewFixtures.mixedQueue, emptyMessage: "", emptyDetail: "", showStop: true)
+    DownloadListView(downloads: PreviewFixtures.mixedQueue, emptyMessage: "", emptyDetail: "")
         .previewEnvironment()
         .preferredColorScheme(.dark)
 }

@@ -254,7 +254,6 @@ class LanguageService: ObservableObject {
         "update_err_architecture": "App bundle does not support required architecture: %@",
         "update_err_verification_failed": "Verification failed: %@",
         "update_err_manifest_signature": "Release manifest signature verification failed",
-        "update_err_manifest_key": "Invalid Ed25519 public key",
         "update_err_manifest_version": "Manifest version '%@' does not match release version '%@'",
         "update_err_manifest_asset": "Asset '%@' not found in signed release manifest",
         "update_err_manifest_checksum": "Checksum '%@' in manifest is not a valid 64-character SHA-256 hex string",

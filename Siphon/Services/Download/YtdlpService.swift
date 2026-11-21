@@ -628,8 +628,6 @@ class YtdlpService: ObservableObject {
     }
 
 
-    nonisolated static let videoMediaExtensions = MediaFileRules.videoMediaExtensions
-    nonisolated static let supportedMediaExtensions = MediaFileRules.supportedMediaExtensions
     nonisolated static func isMediaFilePath(_ path: String) -> Bool {
         MediaFileRules.isMediaFilePath(path)
     }
@@ -1835,13 +1833,6 @@ public struct DownloadResult: Sendable {
         self.partialFailure = partialFailure
     }
 
-    public var path: String {
-        (primaryFile ?? files.first)?.path ?? ""
-    }
-
-    public var lastPathComponent: String {
-        (primaryFile ?? files.first)?.lastPathComponent ?? ""
-    }
 }
 
     private struct ReusedDirectMedia {
@@ -5880,14 +5871,11 @@ public struct DownloadResult: Sendable {
     }
 
     struct BeegExtractedMedia: Sendable {
-        let videoID: String
         let streamURL: String
         let pageURL: String
         let title: String
         let thumbnailURL: String?
         let duration: Int?
-        let width: Int?
-        let height: Int?
     }
 
     var beegMediaResolver: ((String) async throws -> BeegExtractedMedia?)?
@@ -5987,8 +5975,6 @@ public struct DownloadResult: Sendable {
 
         var title = "Beeg Video \(videoID)"
         var duration: Int? = nil
-        var width: Int? = nil
-        var height: Int? = nil
         let thumbnailURL = Self.beegURL(host: Self.beegThumbsHost, pathComponents: ["videos", videoID, "0.webp"])?.absoluteString
 
         if let factsURL = Self.beegURL(host: Self.beegStoreHost, pathComponents: ["facts", "file", videoID]) {
@@ -6004,8 +5990,6 @@ public struct DownloadResult: Sendable {
                let factsJSON = (try? JSONSerialization.jsonObject(with: factsData)) as? [String: Any],
                let fileObj = factsJSON["file"] as? [String: Any] {
                 duration = fileObj["fl_duration"] as? Int
-                width = fileObj["fl_width"] as? Int
-                height = fileObj["fl_height"] as? Int
                 if let dataArray = fileObj["data"] as? [[String: Any]] {
                     for item in dataArray {
                         if let col = item["cd_column"] as? String, col == "sf_name",
@@ -6019,14 +6003,11 @@ public struct DownloadResult: Sendable {
         }
 
         return BeegExtractedMedia(
-            videoID: videoID,
             streamURL: streamURL,
             pageURL: url,
             title: title,
             thumbnailURL: thumbnailURL,
-            duration: duration,
-            width: width,
-            height: height
+            duration: duration
         )
     }
 
@@ -6360,7 +6341,6 @@ public struct DownloadResult: Sendable {
         let codec: String
         let path: String
         let url: String
-        let sub: String
     }
 
     struct BestCamExtractedMedia: Sendable {
@@ -6369,7 +6349,6 @@ public struct DownloadResult: Sendable {
         let title: String
         let thumbnailURL: String?
         let duration: Double?
-        let quality: String?
         let encryptedFilename: String?
         let allSources: [BestCamSource]
     }
@@ -6558,7 +6537,6 @@ public struct DownloadResult: Sendable {
                 let resId = (raw["res_id"] as? Int) ?? 0
                 var size = (raw["size"] as? Int64) ?? Int64((raw["size"] as? Int) ?? 0)
                 var codec = (raw["codec"] as? String) ?? "h264"
-                let sub = (raw["sub"] as? String) ?? ""
 
                 // Check direct path & url in raw source (Schema A)
                 if let rawPath = raw["path"] as? String, !rawPath.isEmpty,
@@ -6582,8 +6560,7 @@ public struct DownloadResult: Sendable {
                         size: size,
                         codec: codec,
                         path: path,
-                        url: sourceUrl,
-                        sub: sub
+                        url: sourceUrl
                     ))
                     continue
                 }
@@ -6617,8 +6594,7 @@ public struct DownloadResult: Sendable {
                             size: size,
                             codec: codec,
                             path: p,
-                            url: base,
-                            sub: sub
+                            url: base
                         ))
                     }
                 }
@@ -6649,8 +6625,7 @@ public struct DownloadResult: Sendable {
                     size: size,
                     codec: codec,
                     path: p,
-                    url: base,
-                    sub: ""
+                    url: base
                 ))
             }
         }
@@ -6873,7 +6848,6 @@ public struct DownloadResult: Sendable {
             title: title,
             thumbnailURL: thumbnailURL,
             duration: nil,
-            quality: chosenSource.label,
             encryptedFilename: encryptedFilename,
             allSources: parsedSources
         )
@@ -7026,7 +7000,6 @@ public struct DownloadResult: Sendable {
         let title: String
         let thumbnailURL: String?
         let duration: Double?
-        let quality: String?
         let allSources: [ProtectedSiteSource]
     }
 
@@ -7161,7 +7134,6 @@ public struct DownloadResult: Sendable {
             title: title,
             thumbnailURL: thumbnailURL,
             duration: duration,
-            quality: chosenSource.label,
             allSources: parsedSources
         )
     }
@@ -7304,7 +7276,6 @@ public struct DownloadResult: Sendable {
             title: title,
             thumbnailURL: thumbnailURL,
             duration: duration,
-            quality: chosenSource.label,
             allSources: parsedSources
         )
     }
@@ -7361,7 +7332,7 @@ public struct DownloadResult: Sendable {
         return Self.parsePussyspaceMedia(html: html, targetUrl: targetUrl, requestedFormat: requestedFormat, playerHtml: playerHtml)
     }
 
-    private func normalizeURLForYtdlp(_ urlString: String, depth: Int = 0) -> String {
+    func normalizeURLForYtdlp(_ urlString: String, depth: Int = 0) -> String {
         guard depth < 3 else { return urlString }
         guard var components = URLComponents(string: urlString) else { return urlString }
         if let nested = components.queryItems?.first(where: { ["url", "u", "redirect", "target"].contains($0.name.lowercased()) })?.value,
@@ -7498,10 +7469,6 @@ public struct DownloadResult: Sendable {
         return components.string ?? urlString
     }
 
-    func normalizeURL(_ urlString: String) -> String {
-        normalizeURLForYtdlp(urlString)
-    }
-
     private func isEpornerURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "eporner.com" || host.hasSuffix(".eporner.com")
@@ -7516,10 +7483,6 @@ public struct DownloadResult: Sendable {
     private func isThisVidURL(_ urlOrHost: String) -> Bool {
         let host = (URL(string: urlOrHost)?.host ?? urlOrHost).lowercased()
         return host == "thisvid.com" || host.hasSuffix(".thisvid.com")
-    }
-
-    private func isPornhubURL(_ urlOrHost: String) -> Bool {
-        Self.isPornhubURL(urlOrHost)
     }
 
     nonisolated static func isPornhubURL(_ urlOrHost: String) -> Bool {
@@ -8428,11 +8391,6 @@ public struct DownloadResult: Sendable {
         text.replacingOccurrences(of: "$", with: "%(siphon_unset|$)s")
     }
 
-    /// Nil when nothing in `filename` survives sanitizing.
-    nonisolated static func sanitizedFilenameOrNil(_ filename: String) -> String? {
-        MediaFileRules.sanitizedFilenameOrNil(filename)
-    }
-
     /// Drops `-P/--paths` and `-o/--output` (with their values) from user
     /// arguments. Siphon sets both and only accepts output inside the save
     /// folder, so an override downloads fine but the job reports failure.
@@ -8519,10 +8477,6 @@ public struct DownloadResult: Sendable {
         ])
     }
 
-    nonisolated static func parseArgumentString(_ argString: String) -> [String] {
-        parseArgumentStringChecked(argString).args
-    }
-
     /// Splits like a shell; `isUnterminated` is true when a quote is still open at the end.
     nonisolated static func parseArgumentStringChecked(_ argString: String) -> (args: [String], isUnterminated: Bool) {
         var args: [String] = []
@@ -8554,13 +8508,6 @@ public struct DownloadResult: Sendable {
         if escaping { current.append("\\") }
         if started { args.append(current) }
         return (args, quote != nil)
-    }
-
-    private func sanitizeCookieToken(_ token: String) -> String {
-        return token.replacingOccurrences(of: "\t", with: "")
-                    .replacingOccurrences(of: "\n", with: "")
-                    .replacingOccurrences(of: "\r", with: "")
-                    .replacingOccurrences(of: "\0", with: "")
     }
 
     func createTempCookiesFileFromHeader(url: String, cookieHeader: String) -> URL? {

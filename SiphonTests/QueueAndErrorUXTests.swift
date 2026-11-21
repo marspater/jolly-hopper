@@ -342,7 +342,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         try sampleContent.data(using: .utf8)?.write(to: tempFileURL)
         defer { try? FileManager.default.removeItem(at: tempFileURL) }
         
-        let computed = UpdateChecker.computeSHA256(for: tempFileURL)
+        let computed = (try? UpdateVerifier.computeSHA256(for: tempFileURL))
         XCTAssertNotNil(computed)
         
         // Calculate expected SHA256 using CryptoKit directly
@@ -355,7 +355,7 @@ final class QueueAndErrorUXTests: XCTestCase {
     func testSHA256ChecksumCalculation_ErrorHandling() throws {
         // Test non-existent file
         let nonExistentURL = FileManager.default.temporaryDirectory.appendingPathComponent("test_checksum_missing_\(UUID().uuidString).txt")
-        let computedMissing = UpdateChecker.computeSHA256(for: nonExistentURL)
+        let computedMissing = (try? UpdateVerifier.computeSHA256(for: nonExistentURL))
         XCTAssertNil(computedMissing, "Expected computeSHA256 to return nil for a non-existent file")
 
         // Test file without read permissions
@@ -370,7 +370,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         // Remove read permissions
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: unreadableURL.path)
 
-        let computedUnreadable = UpdateChecker.computeSHA256(for: unreadableURL)
+        let computedUnreadable = (try? UpdateVerifier.computeSHA256(for: unreadableURL))
         XCTAssertNil(computedUnreadable, "Expected computeSHA256 to return nil for a file without read permissions")
     }
 
@@ -450,7 +450,7 @@ final class QueueAndErrorUXTests: XCTestCase {
             XCTAssertEqual(capturedArgs.value[1][idx + 1], "ffmpeg")
         }
         XCTAssertTrue(capturedArgs.value[1].contains("--hls-use-mpegts"))
-        XCTAssertEqual(result.lastPathComponent, "hls_stream_success.mp4")
+        XCTAssertEqual(result.primaryFile?.lastPathComponent, "hls_stream_success.mp4")
     }
 
     func testDirectHlsUsesNativeDownloaderBeforeFfmpegFallback() async throws {
@@ -523,7 +523,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         )
 
         XCTAssertEqual(callCountBox.value, 2, "Must retry download when transient CDN connection refused is encountered")
-        XCTAssertEqual(result.lastPathComponent, "cdn_retry_success.mp4")
+        XCTAssertEqual(result.primaryFile?.lastPathComponent, "cdn_retry_success.mp4")
     }
 
     func testFileExistsIgnoresNonMediaCompanionFiles() {
@@ -638,7 +638,7 @@ final class QueueAndErrorUXTests: XCTestCase {
                     receivedOutputBox.value.append(line)
                 }
             )
-            XCTAssertFalse(output.isEmpty, "Output should be captured completely even on rapid process exit")
+            XCTAssertFalse(output.primaryPath.isEmpty, "Output should be captured completely even on rapid process exit")
             XCTAssertTrue(receivedOutputBox.value.contains(where: { $0.contains("Exiting rapidly") }))
         } catch {
             XCTFail("Rapid process exit should not throw error: \(error)")
@@ -657,13 +657,13 @@ final class QueueAndErrorUXTests: XCTestCase {
         for i in 0..<count {
             let dl = Download(url: "https://example.com/video_\(i)", options: options, title: "Title \(i)")
             let (_, resolvedPath) = manager.planUniqueOutputPath(for: dl)
-            manager.reserveOutputPath(resolvedPath)
+            manager.queue.reserveOutputPath(resolvedPath)
             resolvedPaths.append(resolvedPath)
         }
 
         // Clean up reservations
         for path in resolvedPaths {
-            manager.unreserveOutputPath(path)
+            manager.queue.unreserveOutputPath(path)
         }
 
         let uniqueSet = Set(resolvedPaths)
@@ -742,7 +742,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         manager.downloads = [d1, d2, d3]
 
         let testPath = "/tmp/test_term.mp4"
-        manager.reserveOutputPath(testPath)
+        manager.queue.reserveOutputPath(testPath)
 
         manager.stopAllDownloads()
         manager.shutdown()
@@ -1004,7 +1004,7 @@ final class QueueAndErrorUXTests: XCTestCase {
         let job = Download(url: "https://example.com/video", options: .default, title: "Fixture")
         job.status = .fileExists
         job.diagnostics.dynamicRange = "HDR10"
-        let view = DownloadRowView(download: job, showStop: false)
+        let view = DownloadRowView(download: job)
             .environmentObject(manager)
             .environmentObject(AppState())
             .environmentObject(LanguageService())
@@ -1038,7 +1038,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         let env = AdaptiveRenderingEnvironment.shared
         let systemReduceMotion = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         XCTAssertEqual(env.capabilities.reduceMotion, systemReduceMotion)
-        XCTAssertEqual(env.reduceMotion, systemReduceMotion)
     }
 
     func testBouncyButtonStyleDefaults() {
@@ -1090,12 +1089,12 @@ final class QueueAndErrorUXTests: XCTestCase {
         let attackerUrl = URL(string: "https://evil-attacker.com/malware.dmg")!
         let subAttackerUrl = URL(string: "https://github.com.attacker.com/malware.dmg")!
 
-        XCTAssertTrue(UpdateChecker.isTrustedGitHubURL(valid1))
-        XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(valid2), "The asset CDN is trusted only as a redirect target")
+        XCTAssertTrue(UpdateDownloader.isTrustedGitHubURL(valid1))
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(valid2), "The asset CDN is trusted only as a redirect target")
         XCTAssertTrue(UpdateDownloader.isTrustedRedirectURL(valid2))
-        XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(httpUrl), "Insecure HTTP scheme must be rejected")
-        XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(attackerUrl), "Untrusted domain must be rejected")
-        XCTAssertFalse(UpdateChecker.isTrustedGitHubURL(subAttackerUrl), "Attacker subdomain must be rejected")
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(httpUrl), "Insecure HTTP scheme must be rejected")
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(attackerUrl), "Untrusted domain must be rejected")
+        XCTAssertFalse(UpdateDownloader.isTrustedGitHubURL(subAttackerUrl), "Attacker subdomain must be rejected")
     }
 
     func testHistoricDownloadStripsRawCookies() {
@@ -1286,18 +1285,17 @@ final class QueueAndErrorUXTests: XCTestCase {
 
     func testWhatsNewOnlyShowsOnFirstRunOrUpdate() async {
         let appState = AppState.forTesting()
-        let languageService = LanguageService()
         let testVersion = appState.appVersion
         let userDefaults = TestState.defaults
 
         userDefaults.set(testVersion, forKey: UserDefaultsKeys.lastSeenVersion)
         appState.showWhatsNew = false
-        await appState.checkAndFetchWhatsNew(languageService: languageService)
+        await appState.checkAndFetchWhatsNew()
         XCTAssertFalse(appState.showWhatsNew, "What's New must not show if app is already on current seen version")
 
         userDefaults.set("4.2.0", forKey: UserDefaultsKeys.lastSeenVersion)
         appState.showWhatsNew = false
-        await appState.checkAndFetchWhatsNew(languageService: languageService)
+        await appState.checkAndFetchWhatsNew()
         XCTAssertTrue(appState.showWhatsNew, "What's New must show when app was updated from an older version")
         XCTAssertEqual(userDefaults.string(forKey: UserDefaultsKeys.lastSeenVersion), testVersion, "Seen version must be updated to current")
 
@@ -1583,7 +1581,6 @@ final class QueueAndErrorUXTests: XCTestCase {
     func testSemanticThemeTokens() {
         XCTAssertNotNil(SiphonTheme.surfaceElevated)
         XCTAssertNotNil(SiphonTheme.separator)
-        XCTAssertNotNil(SiphonTheme.selection)
         XCTAssertEqual(SiphonTheme.radiusSmall, 6)
         XCTAssertEqual(SiphonTheme.radiusControl, 8)
         XCTAssertEqual(SiphonTheme.radiusCard, 12)
@@ -1741,50 +1738,6 @@ final class QueueAndErrorUXTests: XCTestCase {
         manager.pauseDownload(dl)
         XCTAssertEqual(dl.status, .paused)
         XCTAssertTrue(manager.history.contains(where: { $0.id == dl.id && $0.status == .paused }), "Paused download must be recorded in history")
-    }
-
-    func testTemporaryFileCleanupDoesNotMatchUnrelatedOrPrefixFiles() {
-        let rawBase = "apple"
-        let sanitizedBase = "apple"
-        let videoId = "1234"
-
-        // Exact match temporary files
-        XCTAssertTrue(DownloadExecutor.isMatchingTemporaryFile(
-            fileName: "apple.mp4.part",
-            rawBaseName: rawBase,
-            sanitizedBaseName: sanitizedBase,
-            videoId: videoId
-        ))
-        XCTAssertTrue(DownloadExecutor.isMatchingTemporaryFile(
-            fileName: "apple.mkv.ytdl",
-            rawBaseName: rawBase,
-            sanitizedBaseName: sanitizedBase,
-            videoId: videoId
-        ))
-
-        // Non-temporary files should NEVER match
-        XCTAssertFalse(DownloadExecutor.isMatchingTemporaryFile(
-            fileName: "apple.mp4",
-            rawBaseName: rawBase,
-            sanitizedBaseName: sanitizedBase,
-            videoId: videoId
-        ))
-
-        // Unrelated file with videoId substring must NOT match
-        XCTAssertFalse(DownloadExecutor.isMatchingTemporaryFile(
-            fileName: "other_movie_1234.mp4.part",
-            rawBaseName: rawBase,
-            sanitizedBaseName: sanitizedBase,
-            videoId: videoId
-        ), "Fuzzy videoId substring match must not delete another video's partial file")
-
-        // Sibling file that only has common prefix (applesauce vs apple) must NOT match
-        XCTAssertFalse(DownloadExecutor.isMatchingTemporaryFile(
-            fileName: "applesauce.mp4.part",
-            rawBaseName: rawBase,
-            sanitizedBaseName: sanitizedBase,
-            videoId: videoId
-        ), "Prefix without dot delimiter must not match sibling downloads")
     }
 
     func testCompatibleMergeOutputFormatAndResolvedExtensionParityForAV1AndVP9() {

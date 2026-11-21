@@ -96,8 +96,7 @@ struct ContentView: View {
                     // after launch, which would cancel a view task midway.
                     Task {
                         await appState.initializeApplicationServices(
-                            ytdlpService: downloadManager.ytdlpService,
-                            languageService: languageService
+                            ytdlpService: downloadManager.ytdlpService
                         )
                         await updateChecker.checkForUpdates()
                         if updateChecker.hasUpdate {
@@ -470,15 +469,15 @@ struct DetailView: View {
                 case .home:
                     HomeView()
                 case .recent:
-                    DownloadListView(downloads: downloadManager.recentDownloads(limit: downloadManager.downloads.count), emptyMessage: languageService.s("no_recent_downloads"), emptyDetail: languageService.s("no_recent_downloads_sub"), emptyIcon: "clock.arrow.circlepath", showStop: true)
+                    DownloadListView(downloads: downloadManager.recentDownloads(limit: downloadManager.downloads.count), emptyMessage: languageService.s("no_recent_downloads"), emptyDetail: languageService.s("no_recent_downloads_sub"), emptyIcon: "clock.arrow.circlepath")
                 case .downloading:
-                    DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), emptyDetail: languageService.s("empty_downloading_detail"), emptyIcon: "arrow.down.circle", showStop: true)
+                    DownloadListView(downloads: downloadManager.downloadingDownloads, emptyMessage: languageService.s("empty_downloading"), emptyDetail: languageService.s("empty_downloading_detail"), emptyIcon: "arrow.down.circle")
                 case .queued:
-                    DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), emptyDetail: languageService.s("empty_queued_detail"), emptyIcon: "clock", showStop: true)
+                    DownloadListView(downloads: downloadManager.queuedDownloads, emptyMessage: languageService.s("empty_queued"), emptyDetail: languageService.s("empty_queued_detail"), emptyIcon: "clock")
                 case .completed:
-                    DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), emptyDetail: languageService.s("empty_completed_detail"), emptyIcon: "checkmark.circle", showStop: false)
+                    DownloadListView(downloads: downloadManager.completedDownloads, emptyMessage: languageService.s("empty_completed"), emptyDetail: languageService.s("empty_completed_detail"), emptyIcon: "checkmark.circle")
                 case .failed:
-                    DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), emptyDetail: languageService.s("empty_failed_detail"), emptyIcon: "exclamationmark.triangle", showStop: false)
+                    DownloadListView(downloads: downloadManager.failedDownloads, emptyMessage: languageService.s("empty_failed"), emptyDetail: languageService.s("empty_failed_detail"), emptyIcon: "exclamationmark.triangle")
                 }
             }
             .transition(pageTransition)
@@ -489,7 +488,6 @@ struct DetailView: View {
 }
 
 struct HomeView: View {
-    @Environment(\.colorScheme) private var colorScheme
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var downloadManager: DownloadManager
     @EnvironmentObject var languageService: LanguageService

@@ -340,23 +340,10 @@ public enum DownloadStatus: String, Codable, Sendable {
     case paused = "paused"
     case fileExists = "file_exists"
 
-    /// Values written by older versions of the app.
-    private static let legacyValues: [String: DownloadStatus] = [
-        "Bilgi Alınıyor": .fetching,
-        "Kuyrukta": .queued,
-        "İndiriliyor": .downloading,
-        "İşleniyor": .processing,
-        "Tamamlandı": .completed,
-        "Hata": .failed,
-        "Durduruldu": .stopped,
-        "Duraklatıldı": .paused,
-        "Dosya Mevcut": .fileExists
-    ]
-
     public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         let value = try container.decode(String.self)
-        guard let status = Self(rawValue: value) ?? Self.legacyValues[value] else {
+        guard let status = Self(rawValue: value) else {
             throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown DownloadStatus value: \(value)")
         }
         self = status

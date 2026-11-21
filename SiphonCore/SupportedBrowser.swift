@@ -44,11 +44,6 @@ public enum SupportedBrowser: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
-    /// Backward compatibility alias for Helium browser option
-    public static var helium: SupportedBrowser {
-        .chromiumBased
-    }
-
     /// Pre-compiled set of all supported browser raw values to eliminate heap allocation during validation passes.
     /// Uses `lazy.map` to stream elements directly into the `Set` without creating an intermediate array allocation on the heap.
     nonisolated public static let allowedRawValues: Set<String> = Set(allCases.lazy.map(\.rawValue))

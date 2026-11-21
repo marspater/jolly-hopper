@@ -8,15 +8,11 @@ class MenuBarManager: NSObject {
 
     private var statusItem: NSStatusItem?
     private var popover: NSPopover?
-    private var languageService: LanguageService?
-    private var downloadManager: DownloadManager?
     private var openMainWindow: (() -> Void)?
 
     func setup(languageService: LanguageService, downloadManager: DownloadManager, openMainWindow: @escaping () -> Void) {
         if statusItem != nil || UITestLaunchMode.isActive { return }
 
-        self.languageService = languageService
-        self.downloadManager = downloadManager
         self.openMainWindow = openMainWindow
 
         // Setup Popover
