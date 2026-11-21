@@ -194,6 +194,18 @@ struct DownloadRowView: View {
                     } else if download.errorUXInfo(lang: languageService) != nil {
                         // A user stop carries no error; it falls through to the "Stopped" badge.
                         errorSection
+                    } else if download.status == .fileExists {
+                        // Conflict choices sit beside the badge, or under it when the row is narrow.
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: SiphonTheme.spacing8) {
+                                statusBadge
+                                fileExistsActions
+                            }
+                            VStack(alignment: .leading, spacing: SiphonTheme.spacing6) {
+                                statusBadge
+                                fileExistsActions
+                            }
+                        }
                     } else {
                         HStack(spacing: 8) {
                             statusBadge
@@ -210,13 +222,6 @@ struct DownloadRowView: View {
                                     .foregroundColor(.secondary)
                                     .help(languageService.s("file_missing_help"))
                             }
-                        }
-
-                        // Conflict choices get their own line so they never cover the title.
-                        if download.status == .fileExists {
-                            fileExistsActions
-                                // Cancel the ghost buttons' inner padding so the first label lines up with the badge.
-                                .padding(.leading, -SiphonTheme.spacing10)
                         }
                     }
                 }
@@ -1061,44 +1066,28 @@ struct FileThumbnailView: View {
         }
     }
 
-    /// Overwrite / Download with new name for a `.fileExists` row.
+    /// Download with new name / Overwrite for a `.fileExists` row, in the same
+    /// compact button pair the error rows use. The non-destructive choice leads.
     private var fileExistsActions: some View {
-        HStack(spacing: SiphonTheme.spacing6) {
-            Button {
-                downloadManager.resumeWithOverwrite(download)
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "square.and.arrow.down.on.square.fill")
-                        .font(.system(size: 13))
-                        .accessibilityHidden(true)
-                    Text(languageService.s("overwrite"))
-                        .font(.siphonMetadataMedium)
-                }
-                .foregroundColor(SiphonTheme.statusForeground(for: .queued, colorScheme: colorScheme))
-            }
-            .disabled(download.requiresAdvancedArgumentsReview)
-            .buttonStyle(.siphonGhost)
-            .help(languageService.s("overwrite"))
-            .accessibilityLabel(languageService.s("overwrite"))
-            .accessibilityIdentifier(AccessibilityID.rowOverwrite)
-
-            Button {
+        HStack(spacing: SiphonTheme.spacing8) {
+            Button(languageService.s("download_new_name")) {
                 downloadManager.resumeWithNewName(download)
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus.square.on.square.fill")
-                        .font(.system(size: 13))
-                        .accessibilityHidden(true)
-                    Text(languageService.s("download_new_name"))
-                        .font(.siphonMetadataMedium)
-                }
-                .foregroundColor(SiphonTheme.accentText)
             }
+            .buttonStyle(.siphonPrimary)
+            .controlSize(.small)
             .disabled(download.requiresAdvancedArgumentsReview)
-            .buttonStyle(.siphonGhost)
             .help(languageService.s("download_new_name"))
-            .accessibilityLabel(languageService.s("download_new_name"))
             .accessibilityIdentifier(AccessibilityID.rowNewName)
+
+            Button(languageService.s("overwrite")) {
+                downloadManager.resumeWithOverwrite(download)
+            }
+            .buttonStyle(.siphonSecondary)
+            .controlSize(.small)
+            .tint(nil)
+            .disabled(download.requiresAdvancedArgumentsReview)
+            .help(languageService.s("overwrite"))
+            .accessibilityIdentifier(AccessibilityID.rowOverwrite)
         }
     }
 
