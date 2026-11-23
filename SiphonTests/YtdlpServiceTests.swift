@@ -7803,3 +7803,31 @@ final class YtdlpServiceTests: XCTestCase {
         #expect(YtdlpError.commandFailed("boom").errorDescription == String(format: LanguageService.s("ytdlp_err_command_failed"), "boom"))
     }
 }
+
+@Suite struct HLSPlaylistSavedAsMediaTests {
+    @Test func detectsOnlyFinishedPlaylistFiles() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        try Data("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8\n".utf8).write(to: dir.appendingPathComponent("v.mp4"))
+        try Data("#EXTM3U\n".utf8).write(to: dir.appendingPathComponent("w.mp4.part"))
+        try Data([0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70]).write(to: dir.appendingPathComponent("real.mp4"))
+        #expect(YtdlpService.savedHLSPlaylists(in: dir).map(\.lastPathComponent) == ["v.mp4"])
+    }
+
+    @Test func retryUsesSelectedStreamLinkAsHLS() {
+        let info = Data(#"{"title":"t","formats":[{"format_id":"480p","url":"https://example.com/get_file/1/a.mp4/"},{"format_id":"720p","url":"https://example.com/get_file/1/b.mp4/"}]}"#.utf8)
+        let link = YtdlpService.streamURL(fromInfoJSON: info, formatId: "720p")
+        #expect(link == "https://example.com/get_file/1/b.mp4/")
+        #expect(YtdlpService.streamURL(fromInfoJSON: info, formatId: "bv+ba") == "https://example.com/get_file/1/b.mp4/")
+        #expect(YtdlpService.streamURL(fromInfoJSON: Data(#"{"url":"file:///etc/passwd"}"#.utf8), formatId: nil) == nil)
+
+        let args = ["-o", "n.%(ext)s", "-f", "720p", "--load-info-json", "/tmp/i.json", "--", "https://example.com/videos/1/"]
+        #expect(YtdlpService.argumentsForHLSStreamRetry(args, streamURL: link!, pageURL: "https://example.com/videos/1/",
+                                                        title: #"A\B"#, maxHeight: 720) ==
+                ["-o", "n.%(ext)s", "-f", "b[height<=720]/b", "--add-header", "Referer:https://example.com/videos/1/",
+                 "--replace-in-metadata", "webpage_url", #"(?s)\A.*\Z"#, "https://example.com/videos/1/",
+                 "--replace-in-metadata", "title", #"(?s)\A.*\Z"#, #"A\\B"#,
+                 "--", "https://example.com/get_file/1/b.mp4/"])
+    }
+}

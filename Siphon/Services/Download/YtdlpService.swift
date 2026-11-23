@@ -2251,12 +2251,9 @@ public struct DownloadResult: Sendable {
         // embeds its input URL as the file's source (comment/purl) and titles a
         // bare stream after its file name ("index"), so give it the page instead.
         if targetURL != normalizedURL {
-            let wholeValue = #"(?s)\A.*\Z"#
-            // REPLACE is a Python re.sub template, where only a backslash is special.
-            let literal = { (value: String) in value.replacingOccurrences(of: #"\"#, with: #"\\"#) }
-            args.append(contentsOf: ["--replace-in-metadata", "webpage_url", wholeValue, literal(normalizedURL)])
+            args.append(contentsOf: Self.metadataReplacementArgs(field: "webpage_url", value: normalizedURL))
             if let title = customResolvedTitle, !title.isEmpty {
-                args.append(contentsOf: ["--replace-in-metadata", "title", wholeValue, literal(title)])
+                args.append(contentsOf: Self.metadataReplacementArgs(field: "title", value: title))
             }
         }
 
@@ -2427,6 +2424,7 @@ public struct DownloadResult: Sendable {
             case disableAria2c
             case retryPhantomJSChallenge
             case dropYtdlpThumbnails
+            case hlsPlaylistSavedAsMedia
         }
 
         var triedStrategies = Set<DownloadRecoveryStrategy>()
@@ -2478,6 +2476,26 @@ public struct DownloadResult: Sendable {
                     }
                 }
 
+                // The stream link redirected to an HLS playlist and yt-dlp saved the
+                // playlist as the video. Fresh extraction returns the same link, so
+                // remove the bogus file (yt-dlp would reuse it as already downloaded)
+                // and download the link itself, which yt-dlp then reads as HLS.
+                if !triedStrategies.contains(.hlsPlaylistSavedAsMedia) {
+                    let playlists = Self.savedHLSPlaylists(in: scratchDirectory)
+                    let formatId = currentArgs.firstIndex(of: "-f").flatMap { $0 + 1 < currentArgs.count ? currentArgs[$0 + 1] : nil }
+                    if !playlists.isEmpty,
+                       let streamURL = Self.streamURL(fromInfoJSON: mediaInfo?.rawJSON, formatId: formatId) {
+                        triedStrategies.insert(.hlsPlaylistSavedAsMedia)
+                        for file in playlists { try? FileManager.default.removeItem(at: file) }
+                        let height = mediaInfo?.formats?.first { $0.formatId == formatId }?.parsedHeight
+                        LoggerService.shared.log("Stream link served an HLS playlist; retrying it as HLS", level: .info)
+                        onOutput("[Siphon Info] The video link returned a stream playlist. Retrying as a stream...\n")
+                        currentArgs = Self.argumentsForHLSStreamRetry(currentArgs, streamURL: streamURL, pageURL: normalizedURL,
+                                                                      title: mediaInfo?.title, maxHeight: height)
+                        continue
+                    }
+                }
+
                 // Strategy 0: Reused metadata failed (for example an expired stream URL)
                 // -> extract again. yt-dlp ignores the trailing URL while --load-info-json is set.
                 if let index = currentArgs.firstIndex(of: "--load-info-json"), index + 1 < currentArgs.count,
@@ -2486,6 +2504,12 @@ public struct DownloadResult: Sendable {
                     LoggerService.shared.log("Download with reused metadata failed; retrying with fresh extraction", level: .info)
                     onOutput("[Siphon Info] Refreshing video information and retrying...\n")
                     currentArgs.removeSubrange(index...index + 1)
+                    // A postprocessor rejected a finished download; without this
+                    // yt-dlp keeps that file as "already downloaded" and fails again.
+                    if errText.contains("Postprocessing:"), !currentArgs.contains("--force-overwrites"),
+                       !currentArgs.contains("--no-overwrites"), let separator = currentArgs.lastIndex(of: "--") {
+                        currentArgs.insert("--force-overwrites", at: separator)
+                    }
                     continue
                 }
 
@@ -7565,6 +7589,59 @@ public struct DownloadResult: Sendable {
     nonisolated static func isUnsafeExtensionError(_ text: String) -> Bool {
         let lower = text.lowercased()
         return lower.contains("the extracted extension") && lower.contains("is unusual")
+    }
+
+    /// `--replace-in-metadata` arguments that set `field` to `value` verbatim.
+    nonisolated static func metadataReplacementArgs(field: String, value: String) -> [String] {
+        // REPLACE is a Python re.sub template, where only a backslash is special.
+        ["--replace-in-metadata", field, #"(?s)\A.*\Z"#, value.replacingOccurrences(of: #"\"#, with: #"\\"#)]
+    }
+
+    /// Completed scratch files that hold an HLS playlist. A stream link that
+    /// redirects to a playlist makes yt-dlp's HTTP downloader save the playlist
+    /// text as the media file, which every postprocessor then rejects.
+    nonisolated static func savedHLSPlaylists(in directory: URL) -> [URL] {
+        let files = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
+        let marker = Data("#EXTM3U".utf8)
+        return files.filter { file in
+            guard file.pathExtension != "part", let handle = try? FileHandle(forReadingFrom: file) else { return false }
+            defer { try? handle.close() }
+            return (try? handle.read(upToCount: marker.count)) == marker
+        }
+    }
+
+    /// The stream link of the requested format in yt-dlp's info JSON, else of its best format.
+    nonisolated static func streamURL(fromInfoJSON data: Data?, formatId: String?) -> String? {
+        guard let data, let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        let formats = info["formats"] as? [[String: Any]] ?? []
+        let format = formats.first { $0["format_id"] as? String == formatId } ?? formats.last
+        guard let link = (format?["url"] ?? info["url"]) as? String,
+              let scheme = URL(string: link)?.scheme?.lowercased(), scheme == "https" || scheme == "http" else { return nil }
+        return link
+    }
+
+    /// Points the download at the stream link itself, where yt-dlp sees the HLS
+    /// playlist. Format ids change with the new extraction, so the selection
+    /// becomes a height ceiling; page URL and title stay those of the page.
+    nonisolated static func argumentsForHLSStreamRetry(_ args: [String], streamURL: String, pageURL: String,
+                                                       title: String?, maxHeight: Int?) -> [String] {
+        guard let separator = args.lastIndex(of: "--"), separator + 1 < args.count else { return args }
+        var options = Array(args[..<separator])
+        if let index = options.firstIndex(of: "--load-info-json"), index + 1 < options.count {
+            options.removeSubrange(index...index + 1)
+        }
+        let selector = maxHeight.map { "b[height<=\($0)]/b" } ?? "b"
+        if let index = options.firstIndex(of: "-f"), index + 1 < options.count {
+            options[index + 1] = selector
+        } else {
+            options += ["-f", selector]
+        }
+        options += ["--add-header", "Referer:\(pageURL)"]
+        options += metadataReplacementArgs(field: "webpage_url", value: pageURL)
+        if let title, !title.isEmpty {
+            options += metadataReplacementArgs(field: "title", value: title)
+        }
+        return options + ["--", streamURL]
     }
 
     nonisolated static func argumentsWithoutThumbnailFlags(_ args: [String]) -> [String] {
