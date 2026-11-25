@@ -88,6 +88,11 @@ final class QueueRecoveryStoreTests: XCTestCase {
         try JSONSerialization.data(withJSONObject: json).write(to: recoveryFileURL)
 
         XCTAssertEqual(store.loadInterruptedJobs().map(\.id), [second.id])
+
+        // The skipped entry survives the next persist in a backup.
+        let original = try Data(contentsOf: recoveryFileURL)
+        store.persist(activeJobs: [second])
+        XCTAssertEqual(try Data(contentsOf: recoveryFileURL.appendingPathExtension("corrupt")), original)
     }
 
     func testUnreadableRecoverySnapshotIsPreservedBeforeOverwrite() throws {

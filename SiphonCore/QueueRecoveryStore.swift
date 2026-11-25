@@ -206,18 +206,20 @@ public final class QueueRecoveryStore {
                let rawVersion = rawJson["version"] as? Int, rawVersion != 1 {
                 log("Ignoring queue recovery snapshot with unknown version \(rawVersion)", .warning)
                 hasUnsupportedSchemaSnapshot = true
-                preserveUnsupportedSnapshot(version: rawVersion)
+                copySnapshot(toBackup: "unsupported-v\(rawVersion)")
                 return []
             }
             let snapshot = try JSONDecoder().decode(QueueRecoverySnapshot.self, from: data)
             guard snapshot.version == 1 else {
                 log("Ignoring queue recovery snapshot with unknown version \(snapshot.version)", .warning)
                 hasUnsupportedSchemaSnapshot = true
-                preserveUnsupportedSnapshot(version: snapshot.version)
+                copySnapshot(toBackup: "unsupported-v\(snapshot.version)")
                 return []
             }
             if snapshot.skippedJobCount > 0 {
                 log("Skipped \(snapshot.skippedJobCount) unreadable queue recovery entries", .warning)
+                // The next persist rewrites the file without them.
+                copySnapshot(toBackup: "corrupt")
             }
             guard !snapshot.isCleanShutdown && !snapshot.jobs.isEmpty else {
                 return []
@@ -230,8 +232,8 @@ public final class QueueRecoveryStore {
         }
     }
 
-    private func preserveUnsupportedSnapshot(version: Int) {
-        let backup = fileURL.appendingPathExtension("unsupported-v\(version)")
+    private func copySnapshot(toBackup suffix: String) {
+        let backup = fileURL.appendingPathExtension(suffix)
         do {
             if fileManager.fileExists(atPath: backup.path) {
                 try fileManager.removeItem(at: backup)
@@ -239,7 +241,7 @@ public final class QueueRecoveryStore {
             try fileManager.copyItem(at: fileURL, to: backup)
             try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: backup.path)
         } catch {
-            log("Failed to preserve unsupported queue recovery snapshot: \(error.localizedDescription)", .error)
+            log("Failed to back up queue recovery snapshot: \(error.localizedDescription)", .error)
         }
     }
 

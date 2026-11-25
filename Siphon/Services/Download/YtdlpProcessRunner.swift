@@ -235,13 +235,17 @@ public final class DownloadProcessController: @unchecked Sendable {
             activeProcess = proc
         }
 
+        // Registered before launch, under the lock: a quit-time cancel finds a
+        // live process and waits here for its PID, and the exit handler of a
+        // process that exits at once cannot be overtaken by the registration.
+        setRunning(true)
         do {
             try proc.run()
             let pid = proc.processIdentifier
             internalLifecycle = .running(pid: pid)
             lock.unlock()
-            setRunning(true)
         } catch {
+            setRunning(false)
             internalLifecycle = .failed(error.localizedDescription)
             activeProcess = nil
             lock.unlock()
