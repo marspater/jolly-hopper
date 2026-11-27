@@ -5102,6 +5102,12 @@ final class YtdlpServiceTests: XCTestCase {
             XCTAssertTrue(args.contains("generic:impersonate=firefox:macos"))
             XCTAssertFalse(args.contains(where: { $0.hasPrefix("Sec-Ch-Ua:") }))
             XCTAssertFalse(args.contains("--user-agent"))
+            // Read timeouts on the media CDN resume the file; a cap of 3 gave up mid-download.
+            if let index = args.lastIndex(of: "--retries") {
+                XCTAssertEqual(args[index + 1], "10")
+            } else {
+                XCTFail("missing --retries")
+            }
             return "/tmp/test.mp4"
         })
         _ = try await service.download(url: url, options: .default, onProgress: { _, _, _ in }, onOutput: { _ in })

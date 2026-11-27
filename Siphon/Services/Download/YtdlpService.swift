@@ -2401,6 +2401,9 @@ public struct DownloadResult: Sendable {
             args.append(contentsOf: ["--extractor-args", "generic:fragment_query=check=\(check)"])
         }
 
+        // Some HLS streams carry their first video parameter sets deep into the file;
+        // FFmpeg's default 5 MB probe then misses the video size and the MP4 rewrap fails.
+        args.append(contentsOf: ["--postprocessor-args", "FixupM3u8+ffmpeg_i1:-analyzeduration 100M -probesize 100M"])
         args.append("--no-color")
         args.append("--newline")
         args.append(contentsOf: ["--progress-template", "download:SIPHON_PROG:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s"])
@@ -8221,7 +8224,8 @@ public struct DownloadResult: Sendable {
         if usesBrowserTransport(url) && !isRecu {
             refreshBrowserTransportIdentity(for: url, args: &args)
             // Smaller request bursts and bounded exponential backoff for sensitive hosts.
-            Self.capOption("--retries", "3", short: "-R", in: &args)
+            // HTTP retries keep the default: they resume a single-file download after
+            // a read timeout on the media CDN, and the backoff below already paces them.
             Self.capOption("--fragment-retries", "3", in: &args)
             Self.capOption("--concurrent-fragments", "2", short: "-N", in: &args)
             args.append(contentsOf: ["--extractor-retries", "2",
