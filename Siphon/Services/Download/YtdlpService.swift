@@ -2388,7 +2388,9 @@ public struct DownloadResult: Sendable {
         }
         defer { thumbnailTask?.cancel() }
 
-        appendSiteSpecificArgs(for: customEmbedURL ?? targetURL, options: options, mediaInfo: mediaInfo, rawUserAgent: sucuriCookie == nil ? recuUserAgent : Self.sucuriUserAgent, to: &args)
+        // A stream on the GayForFans CDN gets that CDN's rules (no impersonation, which it
+        // answers with 403) even when a different site's page embedded it.
+        appendSiteSpecificArgs(for: Self.isGFFMediaURL(targetURL) ? targetURL : (customEmbedURL ?? targetURL), options: options, mediaInfo: mediaInfo, rawUserAgent: sucuriCookie == nil ? recuUserAgent : Self.sucuriUserAgent, to: &args)
         // Recu recordings are signed VOD streams; a skipped segment would leave
         // a corrupt recording. Live streams elsewhere may legitimately rotate
         // unavailable fragments, so keep yt-dlp's default behavior there.
@@ -4130,7 +4132,10 @@ public struct DownloadResult: Sendable {
             PlayerCaptureSite(host: "fxggxt.com", name: "FXGGXT"),
             // yt-dlp's generic extractor always sends Accept-Encoding: identity. The site
             // caches that variant for days, so its signed video URL has already expired.
-            PlayerCaptureSite(host: "gayporno.fm", name: "GayPorno.fm")
+            PlayerCaptureSite(host: "gayporno.fm", name: "GayPorno.fm"),
+            // The site answers 403 to that same identity request, before any media is found.
+            PlayerCaptureSite(host: "justthegays.tv", name: "JustTheGays"),
+            PlayerCaptureSite(host: "justthegays.com", name: "JustTheGays")
         ].first { host == $0.host || host.hasSuffix("." + $0.host) }
     }
 
@@ -4371,9 +4376,15 @@ public struct DownloadResult: Sendable {
         // behind a fake PNG header on an image CDN, which ffmpeg can't read.
         // ponytail: no segment unwrapping; add it if a site has only such players.
         let isHLS = { (stream: CapturedStream) in URL(string: stream.url)?.pathExtension.lowercased() == "m3u8" }
-        for stream in capture.streams.filter({ !isHLS($0) }) + capture.streams.filter(isHLS) {
+        // The GayForFans platform streams its scenes as HLS; its direct /media/ files are
+        // ad banners, and yt-dlp reports no duration for them, so the check below can't tell.
+        let isPlatformAd = { (stream: CapturedStream) in Self.isGFFMediaURL(stream.url) && !isHLS(stream) }
+        let candidates = capture.streams.filter { !isPlatformAd($0) }
+        for stream in candidates.filter({ !isHLS($0) }) + candidates.filter(isHLS) {
             var args = [path, "--ignore-config", "--dump-json", "--no-playlist", "--no-warnings"]
-            appendSiteSpecificArgs(for: stream.frameURL, to: &args)
+            // The CDN of the GayForFans platform answers 403 to impersonated requests, so
+            // its probe is built for the stream, not for the page that embeds it.
+            appendSiteSpecificArgs(for: Self.isGFFMediaURL(stream.url) ? stream.url : stream.frameURL, to: &args)
             if let proxy, !proxy.isEmpty {
                 args.append(contentsOf: ["--proxy", proxy])
             }
@@ -8080,9 +8091,6 @@ public struct DownloadResult: Sendable {
         } else if isXHamster {
             args.append(contentsOf: ["--add-header", "Referer:https://xhamster.com/"])
             args.append(contentsOf: ["--add-header", "Origin:https://xhamster.com"])
-            args.append(contentsOf: ["--hls-use-mpegts"])
-        } else if parsedHost == "justthegays.com" || parsedHost.hasSuffix(".justthegays.com") || parsedHost == "justthegays.tv" || parsedHost.hasSuffix(".justthegays.tv") {
-            args.append(contentsOf: ["--add-header", "Referer:https://justthegays.com/"])
             args.append(contentsOf: ["--hls-use-mpegts"])
         } else if isBeeg {
             args.append(contentsOf: ["--add-header", "Referer:https://beeg.com/"])

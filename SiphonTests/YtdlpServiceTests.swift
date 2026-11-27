@@ -6500,24 +6500,69 @@ final class YtdlpServiceTests: XCTestCase {
         }
     }
 
-    func testJustTheGaysHlsDownloaderArgs() async throws {
-        let capturedArgsBox = TestBox<[String]>([])
-        service.processRunner = MockYtdlpProcessRunner(mockDownload: { args in
-            capturedArgsBox.value = args
-            return "[download] Destination: /tmp/test_jtg.mp4\n"
+    func testJustTheGaysProbeDoesNotImpersonateForGFFCDN() async throws {
+        let stream = YtdlpService.CapturedStream(
+            url: "https://cdn.gff.network/sample/index.m3u8",
+            frameURL: "https://justthegays.tv/video/sample-100"
+        )
+        service.browserCaptureLoader = { _ in YtdlpService.BrowserCapture(pageHTML: "", streams: [stream]) }
+        let probeArgs = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { args in
+            probeArgs.value = args
+            return #"{"id":"s","title":"s","duration":480,"formats":[{"format_id":"0","ext":"mp4","protocol":"m3u8_native"}]}"#
         })
+        let info = try await service.fetchInfo(url: "https://justthegays.tv/video/sample-100")
+        XCTAssertEqual(info.manifestUrl, stream.url)
+        XCTAssertFalse(probeArgs.value.contains { $0.hasPrefix("generic:impersonate") })
+    }
 
+    func testPlayerCaptureSkipsGFFAdBannerAndTakesHLS() async throws {
+        let ad = YtdlpService.CapturedStream(
+            url: "https://cdn.gff.network/x/media/44/abc.mp4", frameURL: "https://justthegays.tv/video/sample-100"
+        )
+        let scene = YtdlpService.CapturedStream(
+            url: "https://cdn.gff.network/x/videos/2026/09/sample/index.m3u8", frameURL: "https://justthegays.tv/video/sample-100"
+        )
+        service.browserCaptureLoader = { _ in YtdlpService.BrowserCapture(pageHTML: "", streams: [ad, scene]) }
+        // No duration, as yt-dlp reports for a direct file: only the filter can reject the ad.
+        service.processRunner = MockYtdlpProcessRunner(mockCommand: { _ in
+            #"{"id":"s","title":"s","formats":[{"format_id":"0","ext":"mp4","protocol":"https"}]}"#
+        })
+        let info = try await service.fetchInfo(url: "https://justthegays.tv/video/sample-100")
+        XCTAssertEqual(info.manifestUrl, scene.url)
+    }
+
+    func testJustTheGaysDownloadDoesNotImpersonateForGFFCDN() async throws {
+        let stream = YtdlpService.CapturedStream(
+            url: "https://cdn.gff.network/x/videos/2026/09/sample/index.m3u8",
+            frameURL: "https://justthegays.tv/video/sample-100"
+        )
+        service.browserCaptureLoader = { _ in YtdlpService.BrowserCapture(pageHTML: "", streams: [stream]) }
+        let downloadArgs = TestBox<[String]>([])
+        service.processRunner = MockYtdlpProcessRunner(
+            mockCommand: { _ in
+                #"{"id":"s","title":"s","duration":480,"formats":[{"format_id":"0","ext":"mp4","protocol":"m3u8_native"}]}"#
+            },
+            mockDownload: { args in
+                downloadArgs.value = args
+                return "[download] Destination: /tmp/test_jtg.mp4\n"
+            }
+        )
         _ = try await service.download(
-            url: "https://justthegays.tv/video/protected-sample-video-100",
+            url: "https://justthegays.tv/video/sample-100",
             options: DownloadOptions.default,
             onProgress: { _, _, _ in /* Progress ignored in test */ },
             onOutput: { _ in /* Output ignored in test */ }
         )
+        XCTAssertEqual(downloadArgs.value.last, stream.url)
+        XCTAssertFalse(downloadArgs.value.contains { $0.hasPrefix("generic:impersonate") })
+    }
 
-        let args = capturedArgsBox.value
-        XCTAssertTrue(args.contains("Referer:https://justthegays.com/"))
-        XCTAssertFalse(args.contains("--downloader"), "Native downloads keep -N and yt-dlp's encryption checks")
-        XCTAssertTrue(args.contains("--hls-use-mpegts"))
+    func testJustTheGaysUsesPlayerCapture() {
+        // The page answers 403 to yt-dlp's identity-encoded request; the CDN stream is open.
+        XCTAssertNotNil(service.playerCaptureSite(for: "https://justthegays.tv/video/sample-100"))
+        XCTAssertNotNil(service.playerCaptureSite(for: "https://www.justthegays.com/video/sample-100"))
+        XCTAssertNil(service.playerCaptureSite(for: "https://justthegays.tv.evil.com/video/sample-100"))
     }
 
     func testHlsPostprocessingRecoveryRetriesWithFfmpeg() async throws {

@@ -4,7 +4,7 @@ import Foundation
 public enum LogSanitizer {
     // Bolt Performance Optimization: Pre-compile regular expressions to eliminate
     // regex compilation and allocation overhead on every log, diagnostic text, and log export call.
-    private static let urlRegex = try? NSRegularExpression(pattern: #"(?:https?|socks[45]a?h?)://[^\s"'<>]+"#, options: [])
+    private static let urlRegex = try? NSRegularExpression(pattern: #"(?:https?|socks[45]a?h?)://[^\s"'<>]+"#, options: .caseInsensitive)
     private static let redactionRegexes: [(NSRegularExpression, String)] = [
         (#"(?i)bearer\s+[A-Za-z0-9\-_\.]+"#, "Bearer <REDACTED>"),
         (#"(?i)authorization:\s*[^\r\n]+"#, "Authorization: <REDACTED>"),

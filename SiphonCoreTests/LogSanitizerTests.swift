@@ -181,6 +181,12 @@ final class LogSanitizerTests: XCTestCase {
 }
 
 @Suite struct LogSanitizerSecretKeyTests {
+    @Test func uppercaseSchemeURLsDropCredentials() {
+        let output = LogSanitizer.sanitizeDiagnosticText("Failed: HTTPS://user:hunter2@example.com/v?x=abc123")
+        #expect(!output.contains("hunter2"))
+        #expect(!output.contains("abc123"))
+    }
+
     @Test func jsonKeysEndingInASecretWordAreRedacted() {
         let input = #"{"refresh_token":"r-secret","accessToken":"a-secret","X-Amz-Credential":"c-secret","author":"visible"} credential=d-secret"#
         let sanitized = LogSanitizer.sanitizeDiagnosticText(input)
